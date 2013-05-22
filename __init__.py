@@ -1,4 +1,4 @@
-import socket, urllib, threading
+import socket, urllib, threading, time
 import Queue
 
 from ypacket import YPacket, InvalidPacket
@@ -10,6 +10,7 @@ HOST = 'scsa.msg.yahoo.com'
 PORT = 5050
 CLIENT_BUILD_ID = '4194239'
 CLIENT_VERSION = '9.0.0.2162'
+KEEP_ALIVE_TIMEOUT = 30
 
 # init the debugger
 debug = Debugger()
@@ -30,7 +31,9 @@ class EmussaSession:
         self.password = ''
         self.cbs = {}
         self.session_id = "\x00\x00\x00\x00"
+        self.is_invisible = False
         self.is_connected = False
+        self.last_keepalive = 0
         self.y_cookie = self.t_cookie = ''
         self.debug = debug
         self.debug.info('Hi, libemussa here!')
@@ -39,6 +42,12 @@ class EmussaSession:
         if self.cbs.has_key(callback_id):
             for func in self.cbs[callback_id]:
                 func(self, *args)
+
+    def _get_status_type(self):
+        if self.is_invisible:
+            return const.YAHOO_STATUS_INVISIBLE
+        else:
+            return const.YAHOO_STATUS_AVAILABLE
 
     def _connect(self, server, port):
         try:
@@ -83,6 +92,7 @@ class EmussaSession:
             #except:
             #    debug.warning('Error while reading data packet')
         debug.info('Listener thread ended.')
+        self.is_connected = False
 
     def _sender(self):
         if not self.is_connected:
@@ -105,6 +115,18 @@ class EmussaSession:
             self._connect(HOST, PORT)
             threading.Thread(target=self._sender).start()
         queue.put(y)
+
+    def _keepalive(self):
+        self.last_keepalive = time.time()
+        while self.is_connected:
+            time.sleep(1)
+            if self.last_keepalive + KEEP_ALIVE_TIMEOUT < time.time() and self.is_connected:
+                y = YPacket()
+                y.service = const.YAHOO_SERVICE_KEEPALIVE
+                y.status = self._get_status_type()
+                y.data['0'] = self.username
+                self._send(y)
+                self.last_keepalive = time.time()
 
     def _process_packet(self, y):
         if y.sid != "\x00\x00\x00\x00":
@@ -142,7 +164,7 @@ class EmussaSession:
     def _request_auth(self):
         y = YPacket()
         y.service = const.YAHOO_SERVICE_AUTH
-        y.status = const.YAHOO_STATUS_AVAILABLE
+        y.status = self._get_status_type()
         y.data['1'] = self.username
         self._send(y)
 
@@ -233,7 +255,7 @@ class EmussaSession:
         hash = utils.yahoo_generate_hash(crumb + challenge)
         y = YPacket()
         y.service = const.YAHOO_SERVICE_AUTHRESP
-        y.status = const.YAHOO_STATUS_AVAILABLE
+        y.status = self._get_status_type()
         keyvals = {
         '0'   : self.username,
         '1'   : self.username,
@@ -258,6 +280,9 @@ class EmussaSession:
         pi.surname = data['254']
         pi.country = data['470']
         self._callback(EMUSSA_CALLBACK_SELFCONTACT, pi)
+
+        debug.info('Starting keepalive thread')
+        threading.Thread(target=self._keepalive).start()
 
     def _received_buddylist(self, data):
         debug.info('Received buddylist')
@@ -353,7 +378,7 @@ class EmussaSession:
     def _send_message(self, msg):
         y = YPacket()
         y.service = const.YAHOO_SERVICE_MESSAGE
-        y.status = const.YAHOO_STATUS_AVAILABLE
+        y.status = self._get_status_type()
         keyvals = {
         '1'   : self.username,
         '5'   : msg.receiver,
@@ -369,7 +394,7 @@ class EmussaSession:
             is_not_available = '0'
         y = YPacket()
         y.service = const.YAHOO_SERVICE_Y6_STATUS_UPDATE
-        y.status = const.YAHOO_STATUS_AVAILABLE
+        y.status = self._get_status_type()
         y.data['10'] = str(status.code)
         y.data['19'] = status.message
         y.data['47'] = is_not_available
@@ -384,7 +409,7 @@ class EmussaSession:
     def _toggle_visible(self, invisible = False):
         y = YPacket()
         y.service = const.YAHOO_SERVICE_Y6_VISIBLE_TOGGLE
-        y.status = const.YAHOO_STATUS_AVAILABLE
+        y.status = self._get_status_type()
         if invisible:
             y.data['13'] = '2'
         else:
