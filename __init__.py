@@ -420,7 +420,18 @@ class EmussaSession:
             y.data['13'] = '2'
         else:
             y.data['13'] = '1'
-        self._send(y)            
+        self._send(y)
+
+    def _send_typing(self, tn):
+        y = YPacket()
+        y.service = const.YAHOO_SERVICE_TYPING
+        y.status = const.YAHOO_STATUS_NOTIFY
+        y.data['49'] = 'TYPING'
+        y.data['1'] = self.username
+        y.data['5'] = tn.receiver
+        y.data['241'] = '0'
+        y.data['13'] = tn.status
+        self._send(y)
 
     # "public" methods
     def register_callback(self, callback_id, function):
@@ -469,3 +480,15 @@ class EmussaSession:
         else:
             debug.info('Switch visibility to visible')
             self._toggle_visible(False)
+
+    def send_typing(self, to, typing):
+        debug.info('Sending TYPING ({0}) to {1}'.format(typing, to))
+        tn = im.TypingNotify()
+        tn.sender = self.username
+        tn.receiver = to
+        if typing:
+            tn.status = '1'
+        else:
+            tn.status = '0'
+        self._send_typing(tn)
+
