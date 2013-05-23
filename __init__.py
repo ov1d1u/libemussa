@@ -8,8 +8,8 @@ import const, im, utils
 
 HOST = 'scsa.msg.yahoo.com'
 PORT = 5050
-CLIENT_BUILD_ID = '4194239'
-CLIENT_VERSION = '9.0.0.2162'
+CLIENT_BUILD_ID = '33554367'
+CLIENT_VERSION = '11.5.0.192'
 KEEP_ALIVE_TIMEOUT = 30
 
 # init the debugger
@@ -129,6 +129,7 @@ class EmussaSession:
                 self.last_keepalive = time.time()
 
     def _process_packet(self, y):
+        debug.info('Received packet of type {0}, size {1}'.format(hex(y.service), y.length))
         if y.sid != "\x00\x00\x00\x00":
             debug.info('Setting session id')
             self.session_id = y.sid
@@ -324,12 +325,13 @@ class EmussaSession:
                 if buddy:
                     buddy.status.message = data[key]
             if key == '47':
-                if data[key] == '0':
-                    buddy.status.code = const.YAHOO_STATUS_AVAILABLE
-                elif data[key] == '1':
-                    buddy.status.code = const.YAHOO_STATUS_BUSY
-                elif data[key] == '2':
-                    buddy.status.code = const.YAHOO_STATUS_BRB
+                if buddy:
+                    if data[key] == '0':
+                        buddy.status.code = const.YAHOO_STATUS_AVAILABLE
+                    elif data[key] == '1':
+                        buddy.status.code = const.YAHOO_STATUS_BUSY
+                    elif data[key] == '2':
+                        buddy.status.code = const.YAHOO_STATUS_BRB
             if key == '137':
                 if buddy:
                     buddy.status.idle_time = data[key]
@@ -352,12 +354,15 @@ class EmussaSession:
 
     def _buddy_changed_status(self, data):
         debug.info('Update buddy status')
-        buddy = self._buddies_from_data(data)[0]
-        self._callback(EMUSSA_CALLBACK_BUDDY_UPDATE, buddy)
+        buddies = self._buddies_from_data(data)
+        if buddies:
+            buddy = self._buddies_from_data(data)[0]
+            self._callback(EMUSSA_CALLBACK_BUDDY_UPDATE, buddy)
 
     def _typing(self, data):
         typing = im.TypingNotify()
-        typing.sender = data['4']
+        if data.has_key('4'):
+            typing.sender = data['4']
         typing.receiver = data['5']
         typing.status = int(data['13'])
         if typing.status:
@@ -369,7 +374,8 @@ class EmussaSession:
     def _message_received(self, data):
         debug.info('New personal IM')
         msg = im.PersonalMessage()
-        msg.sender = data['4']
+        if data.has_key('4'):
+            msg.sender = data['4']
         msg.receiver = data['5']
         #msg.timestamp = data['15']
         msg.message = data['14']

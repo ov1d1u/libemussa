@@ -3,7 +3,7 @@ from itertools import izip
 
 from utils import YDict
 
-YMSG_VER = chr(0x00) + chr(0x10) + chr(0x00) + chr(0x00)
+YMSG_VER = chr(0x00) + chr(0x13) + chr(0x00) + chr(0x00)
 YMSG_HEADER = 'YMSG'
 YMSG_SEP = chr(0xc0) + chr(0x80)
 

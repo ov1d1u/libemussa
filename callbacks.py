@@ -106,6 +106,7 @@ def callback(EmussaSession emussa, TypingNotify tn)
 	///
 
 Called when a typing notification is received; class TypingNotify is defined in im.py
+WARNING: If msg.sender is empty it means that the message was sent by ourselves from another device
 """
 
 
@@ -116,6 +117,7 @@ def callback(EmussaSession emussa, PersonalMessage msg)
 	///
 
 Called when an IM is received; class PersonalMessage is defined in im.py
+WARNING: If tn.sender is empty it means that we are typing from another device
 """
 
 
