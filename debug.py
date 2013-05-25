@@ -24,7 +24,7 @@ class Debugger:
 
 	@level.setter
 	def level(self, lvl):
-		print 'Debug level set to {0}'.format(lvl)
+		print('Debug level set to {0}'.format(lvl))
 		self._level = lvl
 		self.info('Debug level set to {0}'.format(lvl))
 

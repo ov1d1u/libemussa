@@ -1,10 +1,13 @@
-import socket, urllib, threading, time
-import Queue
+import socket, urllib.parse, urllib.request, threading, time
+import queue
 
-from ypacket import YPacket, InvalidPacket
-from debug import Debugger
-from callbacks import *
-import const, im, utils
+from .ypacket import YPacket, InvalidPacket
+from .debug import Debugger
+from .callbacks import *
+from .const import *
+from .im import *
+from .utils import *
+#import const, im, utils
 
 HOST = 'scsa.msg.yahoo.com'
 PORT = 5050
@@ -14,10 +17,10 @@ KEEP_ALIVE_TIMEOUT = 30
 
 # init the debugger
 debug = Debugger()
-queue = Queue.Queue()
+queue = queue.Queue()
 
 class EmussaException(Exception):
-    def __init__(self, message, value = const.EMUSSA_ERROR_UNDEFINED):
+    def __init__(self, message, value = EMUSSA_ERROR_UNDEFINED):
         debug.error(message)
         self.message = message
         self.value = value
@@ -30,7 +33,7 @@ class EmussaSession:
         self.username = ''
         self.password = ''
         self.cbs = {}
-        self.session_id = "\x00\x00\x00\x00"
+        self.session_id = b'\x00\x00\x00\x00'
         self.is_invisible = False
         self.is_connected = False
         self.last_keepalive = 0
@@ -39,15 +42,15 @@ class EmussaSession:
         self.debug.info('Hi, libemussa here!')
 
     def _callback(self, callback_id, *args):
-        if self.cbs.has_key(callback_id):
+        if callback_id in self.cbs:
             for func in self.cbs[callback_id]:
                 func(self, *args)
 
     def _get_status_type(self):
         if self.is_invisible:
-            return const.YAHOO_STATUS_INVISIBLE
+            return YAHOO_STATUS_INVISIBLE
         else:
-            return const.YAHOO_STATUS_AVAILABLE
+            return YAHOO_STATUS_AVAILABLE
 
     def _connect(self, server, port):
         try:
@@ -57,7 +60,7 @@ class EmussaSession:
             debug.info('Connection successful')
             self.is_connected = True
             threading.Thread(target=self._listener).start()
-        except Exception, e:
+        except Exception as e:
             self.is_connected = False
             debug.error('Connection failed')
             self._callback(EMUSSA_CALLBACK_CONNECTIONFAILED, e)
@@ -71,14 +74,14 @@ class EmussaSession:
 
     def _listener(self):
         if not self.is_connected:
-            e = EmussaException("Cannot listen to an uninitialized socket", const.EMUSSA_ERROR_NOSOCKET)
+            e = EmussaException("Cannot listen to an uninitialized socket", EMUSSA_ERROR_NOSOCKET)
             self._callback(EMUSSA_CALLBACK_CONNECTIONFAILED, e)
             self._disconnect()
             raise e
 
         debug.info('Starting the socket listener')
         while self.is_connected:
-            header = body = ''
+            header = body = b''
             try:
                 header = self.s.recv(20)
                 y = YPacket()
@@ -96,7 +99,7 @@ class EmussaSession:
 
     def _sender(self):
         if not self.is_connected:
-            EmussaException("Cannot write to an uninitialized socket", const.EMUSSA_ERROR_NOSOCKET)
+            EmussaException("Cannot write to an uninitialized socket", EMUSSA_ERROR_NOSOCKET)
 
         debug.info('Starting the socket writer')
         while self.is_connected:
@@ -105,8 +108,8 @@ class EmussaSession:
                 continue
             ypack.sid = self.session_id
             debug.info('Sending packet of type {0}'.format(hex(ypack.service)))
-            self.s.sendall(str(ypack))
-            debug.info('Sent {0} bytes'.format(len(str(ypack))))
+            self.s.sendall(ypack.encode())
+            debug.info('Sent {0} bytes'.format(len(ypack.encode())))
             queue.task_done()
         debug.info('Sender thread ended.')
 
@@ -122,7 +125,7 @@ class EmussaSession:
             time.sleep(1)
             if self.last_keepalive + KEEP_ALIVE_TIMEOUT < time.time() and self.is_connected:
                 y = YPacket()
-                y.service = const.YAHOO_SERVICE_KEEPALIVE
+                y.service = YAHOO_SERVICE_KEEPALIVE
                 y.status = self._get_status_type()
                 y.data['0'] = self.username
                 self._send(y)
@@ -134,30 +137,30 @@ class EmussaSession:
             debug.info('Setting session id')
             self.session_id = y.sid
 
-        if y.service == const.YAHOO_SERVICE_AUTH:
+        if y.service == YAHOO_SERVICE_AUTH:
             challenge = y.data['94']
             self._auth_response(challenge)
         
-        elif y.service == const.YAHOO_SERVICE_LIST:
+        elif y.service == YAHOO_SERVICE_LIST:
             self._received_own_contact(y.data)
         
-        elif y.service == const.YAHOO_SERVICE_LIST_15:
+        elif y.service == YAHOO_SERVICE_LIST_15:
             self._received_buddylist(y.data)
 
-        elif y.service == const.YAHOO_SERVICE_STATUS_15:
+        elif y.service == YAHOO_SERVICE_STATUS_15:
             self._buddy_online(y.data)
 
-        elif y.service == const.YAHOO_SERVICE_LOGOFF:
+        elif y.service == YAHOO_SERVICE_LOGOFF:
             self._buddy_offline(y.data)
 
-        elif y.service == const.YAHOO_SERVICE_TYPING:
+        elif y.service == YAHOO_SERVICE_TYPING:
             self._typing(y.data)
 
-        elif y.service == const.YAHOO_SERVICE_MESSAGE:
+        elif y.service == YAHOO_SERVICE_MESSAGE:
             offline = y.status == 5
             self._message_received(y.data, offline)
 
-        elif y.service == const.YAHOO_SERVICE_Y6_STATUS_UPDATE:
+        elif y.service == YAHOO_SERVICE_Y6_STATUS_UPDATE:
             self._buddy_changed_status(y.data)
 
         else:
@@ -165,55 +168,55 @@ class EmussaSession:
 
     def _request_auth(self):
         y = YPacket()
-        y.service = const.YAHOO_SERVICE_AUTH
+        y.service = YAHOO_SERVICE_AUTH
         y.status = self._get_status_type()
         y.data['1'] = self.username
         self._send(y)
 
     def _auth_response(self, challenge):
         debug.info('Requesting token')
-        token_url = const.YAHOO_TOKEN_URL.format(self.username, self.password, urllib.quote(challenge))
-        lines = urllib.urlopen(token_url).read().split('\r\n')
+        token_url = YAHOO_TOKEN_URL.format(self.username, self.password, urllib.parse.quote(challenge))
+        lines = urllib.request.urlopen(token_url).read().decode().split('\r\n')
         errcode = lines[0]
         if errcode == '0':
             debug.info('Got token')
         elif errcode == '100':
-            e = EmussaException("Missing required field (username or password).", const.EMUSSA_ERROR_MISSING_REQUIRED_FIELD)
+            e = EmussaException("Missing required field (username or password).", EMUSSA_ERROR_MISSING_REQUIRED_FIELD)
             self._callback(EMUSSA_CALLBACK_SIGNINERROR, e)
             self._disconnect()
             raise e
         elif errcode == '1013':
-            e = EmussaException("Username contains @yahoo.com or similar but should not; strip this information.", const.EMUSSA_ERROR_CONTAINS_AT_YAHOO_COM)
+            e = EmussaException("Username contains @yahoo.com or similar but should not; strip this information.", EMUSSA_ERROR_CONTAINS_AT_YAHOO_COM)
             self._callback(EMUSSA_CALLBACK_SIGNINERROR, e)
             self._disconnect()
             raise e
         elif errcode == '1212':
-            e = EmussaException("The username or password is incorrect.", const.EMUSSA_ERROR_INCORRECT_CREDENTIALS)
+            e = EmussaException("The username or password is incorrect.", EMUSSA_ERROR_INCORRECT_CREDENTIALS)
             self._callback(EMUSSA_CALLBACK_SIGNINERROR, e)
             self._disconnect()
             raise e
         elif errcode == '1213' or errcode == '1236':
-            e = EmussaException("The account is locked because of too many login attempts.", const.EMUSSA_ERROR_ACC_LOCKED)
+            e = EmussaException("The account is locked because of too many login attempts.", EMUSSA_ERROR_ACC_LOCKED)
             self._callback(EMUSSA_CALLBACK_SIGNINERROR, e)
             self._disconnect()
             raise e
         elif errcode == '1214':
-            e = EmussaException("Security lock requiring the use of a CAPTCHA.", const.EMUSSA_ERROR_NEED_CAPTCHA)
+            e = EmussaException("Security lock requiring the use of a CAPTCHA.", EMUSSA_ERROR_NEED_CAPTCHA)
             self._callback(EMUSSA_CALLBACK_SIGNINERROR, e)
             self._disconnect()
             raise e
         elif errcode == '1218':
-            e = EmussaException("The account has been deactivated by Yahoo.", const.EMUSSA_ERROR_ACC_DEACTIVATED)
+            e = EmussaException("The account has been deactivated by Yahoo.", EMUSSA_ERROR_ACC_DEACTIVATED)
             self._callback(EMUSSA_CALLBACK_SIGNINERROR, e)
             self._disconnect()
             raise e
         elif errcode == '1235':
-            e = EmussaException("The username does not exist.", const.EMUSSA_ERROR_ACC_NOT_EXISTS)
+            e = EmussaException("The username does not exist.", EMUSSA_ERROR_ACC_NOT_EXISTS)
             self._callback(EMUSSA_CALLBACK_SIGNINERROR, e)
             self._disconnect()
             raise e
         else:
-            e = EmussaException("Login error: {0}".format(errcode), const.EMUSSA_ERROR_UNDEFINED)
+            e = EmussaException("Login error: {0}".format(errcode), EMUSSA_ERROR_UNDEFINED)
             self._callback(EMUSSA_CALLBACK_SIGNINERROR, e)
             self._disconnect()
             raise e
@@ -225,17 +228,17 @@ class EmussaSession:
                     token_string = value
 
         if not len(token_string):
-            e = EmussaException("Invalid token received.", const.EMUSSA_ERROR_INVALID_TOKEN)
+            e = EmussaException("Invalid token received.", EMUSSA_ERROR_INVALID_TOKEN)
             self._callback(EMUSSA_CALLBACK_SIGNINERROR, e)
             self._disconnect()
             raise e
 
         debug.info('Requesting cookies')
-        login_url = const.YAHOO_LOGIN_URL.format(token_string)
-        lines = urllib.urlopen(login_url).read().split('\r\n')
+        login_url = YAHOO_LOGIN_URL.format(token_string)
+        lines = urllib.request.urlopen(login_url).read().decode().split('\r\n')
         errcode == lines[0]
         if errcode != '0':
-            e = EmussaException("Token rejected by server.", const.EMUSSA_ERROR_INVALID_TOKEN)
+            e = EmussaException("Token rejected by server.", EMUSSA_ERROR_INVALID_TOKEN)
             self._callback(EMUSSA_CALLBACK_SIGNINERROR, e)
             self._disconnect()
             raise e
@@ -254,9 +257,9 @@ class EmussaSession:
             if key == 'T':
                 self.t_cookie = value
 
-        hash = utils.yahoo_generate_hash(crumb + challenge)
+        hash = yahoo_generate_hash(crumb + challenge)
         y = YPacket()
-        y.service = const.YAHOO_SERVICE_AUTHRESP
+        y.service = YAHOO_SERVICE_AUTHRESP
         y.status = self._get_status_type()
         y.data['0'] = self.username
         y.data['1'] = self.username
@@ -273,7 +276,7 @@ class EmussaSession:
 
     def _received_own_contact(self, data):
         debug.info('Received self details')
-        pi = im.PersonalInfo()
+        pi = PersonalInfo()
         pi.yahoo_id = data['3']
         pi.name = data['216']
         pi.surname = data['254']
@@ -292,14 +295,14 @@ class EmussaSession:
                 mode = data[key]
 
             if key == '65':
-                group = im.Group()
+                group = Group()
                 group.name = data[key]
                 self._callback(EMUSSA_CALLBACK_GROUP_RECEIVED, group)
 
             if key == '7':
-                buddy = im.Buddy()
+                buddy = Buddy()
                 buddy.yahoo_id = data[key]
-                buddy.status = im.Status()
+                buddy.status = Status()
                 if mode == '320':
                     buddy.ignored = True
                 self._callback(EMUSSA_CALLBACK_BUDDY_RECEIVED, buddy)
@@ -312,9 +315,9 @@ class EmussaSession:
         buddy = None
         for key in data:
             if key == '7':
-                buddy = im.Buddy()
+                buddy = Buddy()
                 buddy.yahoo_id = data[key]
-                buddy.status = im.Status()
+                buddy.status = Status()
                 buddies.append(buddy)
             if key == '10':
                 if buddy:
@@ -325,11 +328,11 @@ class EmussaSession:
             if key == '47':
                 if buddy:
                     if data[key] == '0':
-                        buddy.status.code = const.YAHOO_STATUS_AVAILABLE
+                        buddy.status.code = YAHOO_STATUS_AVAILABLE
                     elif data[key] == '1':
-                        buddy.status.code = const.YAHOO_STATUS_BUSY
+                        buddy.status.code = YAHOO_STATUS_BUSY
                     elif data[key] == '2':
-                        buddy.status.code = const.YAHOO_STATUS_BRB
+                        buddy.status.code = YAHOO_STATUS_BRB
             if key == '137':
                 if buddy:
                     buddy.status.idle_time = data[key]
@@ -344,9 +347,9 @@ class EmussaSession:
 
     def _buddy_offline(self, data):
         debug.info('Set buddy offline')
-        buddy = im.Buddy()
+        buddy = Buddy()
         buddy.yahoo_id = data['7']
-        buddy.status = im.Status()
+        buddy.status = Status()
         buddy.status.online = False
         self._callback(EMUSSA_CALLBACK_BUDDY_UPDATE, buddy)
 
@@ -358,8 +361,8 @@ class EmussaSession:
             self._callback(EMUSSA_CALLBACK_BUDDY_UPDATE, buddy)
 
     def _typing(self, data):
-        typing = im.TypingNotify()
-        if data.has_key('4'):
+        typing = TypingNotify()
+        if '4' in data:
             typing.sender = data['4']
         typing.receiver = data['5']
         typing.status = int(data['13'])
@@ -379,13 +382,13 @@ class EmussaSession:
         msg = None
         for key in data:
             if key == '4':
-                msg = im.PersonalMessage()
+                msg = PersonalMessage()
                 msg.offline = offline
                 msg.sender = data['4']
 
             if key == '1' and not msg:
                 # this is a message we sent from another device
-                msg = im.PersonalMessage()
+                msg = PersonalMessage()
 
             if key == '5' and msg:
                 msg.receiver = data['5']
@@ -412,7 +415,7 @@ class EmussaSession:
 
     def _send_message(self, msg):
         y = YPacket()
-        y.service = const.YAHOO_SERVICE_MESSAGE
+        y.service = YAHOO_SERVICE_MESSAGE
         y.status = self._get_status_type()
         y.data['1'] = self.username
         y.data['5'] = msg.receiver
@@ -424,8 +427,8 @@ class EmussaSession:
         # Send acknowledgement after receiving a message or
         # we will received again later, after ~7 seconds
         y = YPacket()
-        y.service = const.YAHOO_SERVICE_MESSAGE_ACK
-        y.status = const.YAHOO_STATUS_AVAILABLE
+        y.service = YAHOO_SERVICE_MESSAGE_ACK
+        y.status = YAHOO_STATUS_AVAILABLE
         y.data['1'] = self.username
         y.data['5'] = msg.sender
         y.data['302'] = '430'
@@ -438,10 +441,10 @@ class EmussaSession:
 
     def _set_status(self, status):
         is_not_available = '1'
-        if status.code == const.YAHOO_STATUS_AVAILABLE:
+        if status.code == YAHOO_STATUS_AVAILABLE:
             is_not_available = '0'
         y = YPacket()
-        y.service = const.YAHOO_SERVICE_Y6_STATUS_UPDATE
+        y.service = YAHOO_SERVICE_Y6_STATUS_UPDATE
         y.status = self._get_status_type()
         y.data['10'] = str(status.code)
         y.data['19'] = status.message
@@ -449,14 +452,14 @@ class EmussaSession:
 
         if status.message:
             # fix status type if the client did it wrong
-            y.data.replace_key('10', 0, str(const.YAHOO_STATUS_CUSTOM))
+            y.data.replace_key('10', 0, str(YAHOO_STATUS_CUSTOM))
             y.data['97'] = '1'  # this means UTF8, I guess
         self._send(y)
         self._callback(EMUSSA_CALLBACK_STATUS_CHANGED, status)
 
     def _toggle_visible(self, invisible = False):
         y = YPacket()
-        y.service = const.YAHOO_SERVICE_Y6_VISIBLE_TOGGLE
+        y.service = YAHOO_SERVICE_Y6_VISIBLE_TOGGLE
         y.status = self._get_status_type()
         if invisible:
             y.data['13'] = '2'
@@ -466,8 +469,8 @@ class EmussaSession:
 
     def _send_typing(self, tn):
         y = YPacket()
-        y.service = const.YAHOO_SERVICE_TYPING
-        y.status = const.YAHOO_STATUS_NOTIFY
+        y.service = YAHOO_SERVICE_TYPING
+        y.status = YAHOO_STATUS_NOTIFY
         y.data['49'] = 'TYPING'
         y.data['1'] = self.username
         y.data['5'] = tn.receiver
@@ -477,13 +480,13 @@ class EmussaSession:
 
     # "public" methods
     def register_callback(self, callback_id, function):
-        if self.cbs.has_key(callback_id):
+        if callback_id in self.cbs:
             self.cbs[callback_id].append(function)
         else:
             self.cbs[callback_id] = [function]
 
     def unregister_callback(self, callback_id, function):
-        if self.cbs.has_key(callback_id):
+        if callback_id in self.cbs:
             if function in self.cbs[callback_id]:
                 self.cbs[callback_id].pop(self.cbs[callback_id].index(function))
 
@@ -500,7 +503,7 @@ class EmussaSession:
 
     def send_message(self, to, message):
         debug.info('Sending IM to {0}'.format(to))
-        msg = im.PersonalMessage()
+        msg = PersonalMessage()
         msg.sender = self.username,
         msg.receiver = to
         msg.timestamp = 0
@@ -509,7 +512,7 @@ class EmussaSession:
 
     def set_status(self, status_id, message):
         debug.info('Setting status to {0}, message: \'{1}\''.format(status_id, message))
-        status = im.Status()
+        status = Status()
         status.code = status_id
         status.message = message
         status.idle = 0
@@ -525,7 +528,7 @@ class EmussaSession:
 
     def send_typing(self, to, typing):
         debug.info('Sending TYPING ({0}) to {1}'.format(typing, to))
-        tn = im.TypingNotify()
+        tn = TypingNotify()
         tn.sender = self.username
         tn.receiver = to
         if typing:

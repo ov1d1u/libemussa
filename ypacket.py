@@ -1,12 +1,11 @@
 import struct
-from itertools import izip
 
-from utils import YDict
 
-YMSG_VER = chr(0x00) + chr(0x13) + chr(0x00) + chr(0x00)
-YMSG_HEADER = 'YMSG'
-YMSG_SEP = chr(0xc0) + chr(0x80)
+from .utils import YDict
 
+YMSG_VER = b'\x00\x13\x00\x00'
+YMSG_HEADER = b'YMSG'
+YMSG_SEP = b'\xC0\x80'
 
 class InvalidPacket(Exception):
     pass
@@ -18,12 +17,12 @@ class YPacketError(Exception):
 
 class YPacket(object):
 	def __init__(self, data = None):
-		self._service = chr(0x00) + chr(0x00)
-		self._length = chr(0x00) + chr(0x00)
-		self._status = chr(0x00) + chr(0x00) + chr(0x00) + chr(0x00)
-		self._sid = chr(0x00) + chr(0x00) + chr(0x00) + chr(0x00)
+		self._service = b'\x00\x00'
+		self._length = b'\x00\x00'
+		self._status = b'\x00\x00\x00\x00'
+		self._sid = b'\x00\x00\x00\x00'
 		self._keyvals = YDict()
-		self._data = ''
+		self._data = b''
 
 		if data:
 			self.populateFromData(data)
@@ -78,9 +77,9 @@ class YPacket(object):
 
 	# misc functions
 	def _packData(self):
-		rawData = ''
+		rawData = b''
 		for key in self._keyvals:
-			rawData += key + YMSG_SEP + self._keyvals[key] + YMSG_SEP
+			rawData += key.encode() + YMSG_SEP + self._keyvals[key].encode() + YMSG_SEP
 		return rawData
 
 	def _unpackData(self, raw_data = None):
@@ -89,9 +88,9 @@ class YPacket(object):
 			raw_data = self._data
 		kv = raw_data.split(YMSG_SEP)
 		i = iter(kv)
-		l = list(izip(i, i))
+		l = list(zip(i, i))
 		for key, val in l:
-			ydict[key] = val
+			ydict[key.decode()] = val.decode()
 		return ydict
 
 	def setHeader(self, headerdata):
@@ -111,10 +110,11 @@ class YPacket(object):
 		self.setHeader(header)
 		self.setData(data[20:])
 
-	def __str__(self):
+	def encode(self):
 		self._data = self._packData()
 		self._length = struct.pack('!H', len(self._data))
-		return YMSG_HEADER + YMSG_VER + self._length + self._service + self._status + self._sid + self._data
+		return YMSG_HEADER + YMSG_VER + self._length + self._service \
+			 + self._status + self._sid + self._data
 
 	def __repr__(self):
 		return "<Packet Type={0}, Length={1}b, Status={2}, Data={3}>".format(hex(self.service), self.length, self._status, self._keyvals)

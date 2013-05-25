@@ -168,7 +168,7 @@ class YDict:
         return self.iters[key]
 
     def reset(self):
-        for key in self.keys():
+        for key in list(self.keys()):
             self.seek_reset(key)
 
     def seek_reset(self, key):
@@ -180,11 +180,12 @@ class YDict:
 
 def yahoo_generate_hash(str_data):
     m = md5()
-    m.update(str_data)
+    data = str_data.encode()
+    m.update(data)
     hash = m.digest()
     ybase64 = base64.b64encode(hash)
-    ybase64 = ybase64.replace('+', '.')
-    ybase64 = ybase64.replace('/', '_')
-    ybase64 = ybase64.replace('=', '-')
+    ybase64 = ybase64.replace(b'+', b'.')
+    ybase64 = ybase64.replace(b'/', b'_')
+    ybase64 = ybase64.replace(b'=', b'-')
 
-    return ybase64
+    return ybase64.decode()
