@@ -76,7 +76,6 @@ class YPacket(object):
 	def data(self, ydict):
 		self._keyvals = ydict
 
-
 	# misc functions
 	def _packData(self):
 		rawData = ''

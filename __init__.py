@@ -373,13 +373,34 @@ class EmussaSession:
 
     def _message_received(self, data):
         debug.info('New personal IM')
-        msg = im.PersonalMessage()
-        if data.has_key('4'):
-            msg.sender = data['4']
-        msg.receiver = data['5']
-        #msg.timestamp = data['15']
-        msg.message = data['14']
-        self._callback(EMUSSA_CALLBACK_MESSAGE_IN, msg)
+        messages = []
+
+        msg = None
+        for key in data:
+            if key == '32':
+                if not msg:
+                    msg = im.PersonalMessage()
+                msg.offline = True
+            if key == '1' or key == '4':
+                if not msg:
+                    msg = im.PersonalMessage()
+                if key == '4':
+                    msg.sender = data['4']
+            if key == '5' and msg:
+                msg.receiver = data['5']
+            if key == '15' and msg:
+                msg.timestamp = data['15']
+            if key == '14' and msg:
+                msg.message = data['14']
+            if key == '455' and msg:
+                # end of message
+                msg.id = data['455']
+                messages.append(msg)
+                msg = None
+
+        messages.reverse()
+        for message in messages:
+            self._callback(EMUSSA_CALLBACK_MESSAGE_IN, message)
 
     def _send_message(self, msg):
         y = YPacket()

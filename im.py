@@ -41,7 +41,9 @@ class TypingNotify:
 
 class PersonalMessage:
 	def __init__(self):
+		self.offline = False	# is offline message?
 		self.sender = ''
 		self.receiver = ''
 		self.timestamp = ''
 		self.message = ''
+		self.id = ''
