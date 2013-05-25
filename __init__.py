@@ -154,7 +154,8 @@ class EmussaSession:
             self._typing(y.data)
 
         elif y.service == const.YAHOO_SERVICE_MESSAGE:
-            self._message_received(y.data)
+            offline = y.status == 5
+            self._message_received(y.data, offline)
 
         elif y.service == const.YAHOO_SERVICE_Y6_STATUS_UPDATE:
             self._buddy_changed_status(y.data)
@@ -257,19 +258,16 @@ class EmussaSession:
         y = YPacket()
         y.service = const.YAHOO_SERVICE_AUTHRESP
         y.status = self._get_status_type()
-        keyvals = {
-        '0'   : self.username,
-        '1'   : self.username,
-        '277' : self.y_cookie,
-        '278' : self.t_cookie,
-        '307' : hash,
-        '244' : CLIENT_BUILD_ID,
-        '2'   : '1',
-        '59'  : '',
-        '98'  : 'us',
-        '135' : CLIENT_VERSION
-        }
-        y.data.import_dictionary(keyvals)
+        y.data['0'] = self.username
+        y.data['1'] = self.username
+        y.data['277'] = self.y_cookie
+        y.data['278'] = self.t_cookie
+        y.data['307'] = hash
+        y.data['244'] = CLIENT_BUILD_ID
+        y.data['2'] = '1'
+        y.data['59'] = ''
+        y.data['98'] = 'us'
+        y.data['135'] = CLIENT_VERSION
         self._send(y)
         self._callback(EMUSSA_CALLBACK_ISCONNECTED)
 
@@ -371,49 +369,72 @@ class EmussaSession:
             debug.info('End typing: {0}'.format(typing.sender))
         self._callback(EMUSSA_CALLBACK_TYPING_NOTIFY, typing)
 
-    def _message_received(self, data):
-        debug.info('New personal IM')
+    def _message_received(self, data, offline = False):
+        if offline:
+            debug.info('Got offline messages')
+        else:
+            debug.info('IM received')
         messages = []
 
         msg = None
         for key in data:
-            if key == '32':
-                if not msg:
-                    msg = im.PersonalMessage()
-                msg.offline = True
-            if key == '1' or key == '4':
-                if not msg:
-                    msg = im.PersonalMessage()
-                if key == '4':
-                    msg.sender = data['4']
+            if key == '4':
+                msg = im.PersonalMessage()
+                msg.offline = offline
+                msg.sender = data['4']
+
+            if key == '1' and not msg:
+                # this is a message we sent from another device
+                msg = im.PersonalMessage()
+
             if key == '5' and msg:
                 msg.receiver = data['5']
+
             if key == '15' and msg:
                 msg.timestamp = data['15']
+
             if key == '14' and msg:
                 msg.message = data['14']
+
+            if key == '429' and msg:
+                msg.id = data['429']
+
             if key == '455' and msg:
                 # end of message
-                msg.id = data['455']
                 messages.append(msg)
                 msg = None
 
-        messages.reverse()
+        #messages.reverse()
         for message in messages:
             self._callback(EMUSSA_CALLBACK_MESSAGE_IN, message)
+            if message.id:
+                self._send_acknowledgement(message)
 
     def _send_message(self, msg):
         y = YPacket()
         y.service = const.YAHOO_SERVICE_MESSAGE
         y.status = self._get_status_type()
-        keyvals = {
-        '1'   : self.username,
-        '5'   : msg.receiver,
-        '14'  : msg.message
-        }
-        y.data.import_dictionary(keyvals)
+        y.data['1'] = self.username
+        y.data['5'] = msg.receiver
+        y.data['14'] = msg.message
         self._send(y)
         self._callback(EMUSSA_CALLBACK_MESSAGE_SENT)
+
+    def _send_acknowledgement(self, msg):
+        # Send acknowledgement after receiving a message or
+        # we will received again later, after ~7 seconds
+        y = YPacket()
+        y.service = const.YAHOO_SERVICE_MESSAGE_ACK
+        y.status = const.YAHOO_STATUS_AVAILABLE
+        y.data['1'] = self.username
+        y.data['5'] = msg.sender
+        y.data['302'] = '430'
+        y.data['430'] = msg.id
+        y.data['303'] = '430'
+        y.data['450'] = '0'
+
+        self._send(y)
+        # this is just an acknowledgement, no callback here
 
     def _set_status(self, status):
         is_not_available = '1'

@@ -3,11 +3,9 @@ import base64, os
 
 
 class YDict:
-    def __init__(self, d = None):
+    def __init__(self):
         self.keyvals = []
         self.iters = {}
-        if d:
-            self.import_dictionary(d)
 
     def __setitem__(self, key, value):
         if not key in self.iters:
@@ -75,10 +73,6 @@ class YDict:
     def _fix_seek(self, key):
         if self.get_seek(key) >= self._count_key(key):
             self.set_seek(key, self._count_key(key)-1)
-
-    def import_dictionary(self, d):
-        for key in d:
-            self[key] = d[key]
 
     def export_dictionary(self, d):
         d = {}
