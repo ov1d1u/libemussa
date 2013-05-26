@@ -139,3 +139,13 @@ def callback(EmussaSession emussa, Status status)
 
 Called when self status (!!) is changed; class Status is defined in im.py
 """
+
+
+EMUSSA_CALLBACK_SIGNED_OUT = 13
+"""
+Prototype:
+def callback(EmussaSession emussa)
+	///
+
+Called when user is signed out
+"""

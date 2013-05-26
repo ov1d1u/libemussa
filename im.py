@@ -5,15 +5,18 @@ class PersonalInfo:
 		self.surname = ''		# Real surname
 		self.country = ''		# Country ID
 
+
 class Buddy:
 	def __init__(self):
 		self.yahoo_id = ''		# buddy's Yahoo! ID
 		self.nickname = ''		# buddy's nickname
 		self.status   = Status()# buddy Status
+		self.settings = Settings() # buddy's settings
 		self.ignored  = False	# buddy is on ignore list
 
 	def __repr__(self):
 		return '<Buddy: "{0}">'.format(self.yahoo_id)
+
 
 class Group:
 	def __init__(self):
@@ -47,3 +50,11 @@ class PersonalMessage:
 		self.timestamp = ''
 		self.message = ''
 		self.id = ''
+
+
+class Settings:
+	def __init__(self):
+		self.skin = ''
+		self.show_insider = False
+		self.autologin = False
+		self.hiddenlogin = False

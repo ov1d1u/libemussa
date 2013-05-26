@@ -71,6 +71,7 @@ class EmussaSession:
             self.is_connected = False
             self.s.shutdown(socket.SHUT_WR)
             queue.put(None) # put this in queue to force stopping the sender thread
+        self._callback(EMUSSA_CALLBACK_DISCONNECTED)
 
     def _listener(self):
         if not self.is_connected:
@@ -162,6 +163,9 @@ class EmussaSession:
 
         elif y.service == YAHOO_SERVICE_Y6_STATUS_UPDATE:
             self._buddy_changed_status(y.data)
+
+        elif y.service == YAHOO_SERVICE_SETTINGS:
+            self._set_settings(y.data)
 
         else:
             debug.warning('Unknown packet of type {0}, skipping'.format(hex(y.service)))
@@ -413,6 +417,15 @@ class EmussaSession:
             if message.id:
                 self._send_acknowledgement(message)
 
+    def _sign_out(self):
+        y = YPacket()
+        y.service = YAHOO_SERVICE_LOGOFF
+        y.status = YAHOO_STATUS_AVAILABLE
+        y.data['505'] = '0'
+        self._send(y)
+        self._callback(EMUSSA_CALLBACK_SIGNED_OUT)
+        self._disconnect()
+
     def _send_message(self, msg):
         y = YPacket()
         y.service = YAHOO_SERVICE_MESSAGE
@@ -478,6 +491,11 @@ class EmussaSession:
         y.data['13'] = tn.status
         self._send(y)
 
+    def _set_settings(self, data):
+        print ('SETTINGS')
+        raw_data = data['211']
+        yahoo_parse_settings(raw_data)
+
     # "public" methods
     def register_callback(self, callback_id, function):
         if callback_id in self.cbs:
@@ -492,7 +510,6 @@ class EmussaSession:
 
     def disconnect(self):
         self._disconnect()
-        self._callback(EMUSSA_CALLBACK_DISCONNECTED)
 
     def signin(self, username, password):
         debug.info('Starting authentication')
@@ -500,6 +517,10 @@ class EmussaSession:
         self.password = password
         self._callback(EMUSSA_CALLBACK_ISCONNECTING)
         self._request_auth()
+
+    def signout(self):
+        debug.info('Signing out')
+        self._sign_out()
 
     def send_message(self, to, message):
         debug.info('Sending IM to {0}'.format(to))

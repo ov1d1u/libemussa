@@ -189,3 +189,6 @@ def yahoo_generate_hash(str_data):
     ybase64 = ybase64.replace(b'=', b'-')
 
     return ybase64.decode()
+
+def yahoo_parse_settings(str_data):
+    print(data)
