@@ -1,4 +1,5 @@
 import socket, urllib.parse, urllib.request, threading, time
+import xml.etree.ElementTree as ET
 import queue
 
 from .ypacket import YPacket, InvalidPacket
@@ -313,6 +314,38 @@ class EmussaSession:
 
         data.reset()
 
+    def _get_addressbook(self):
+        url =   'http://address.yahoo.com/yab/us?v=XM&prog=ymsgr&.intl=us&diffs=1&t=' \
+                '0&tags=long&rt=0&prog-ver={0}&useutf8=1&legenc=codepage-1252'.format(
+                    CLIENT_VERSION
+                    )
+        opener = urllib.request.build_opener()
+        opener.addheaders = [('User-agent', 'Mozilla/4.0 (compatible; MSIE 5.5)')]
+        opener.addheaders.append(('Cookie', 'Y={0}; T={1}'.format(self.y_cookie, self.t_cookie)))
+        req = opener.open(url)
+        xmldata = req.read()
+        addressbook = ET.fromstring(xmldata)
+
+        contacts = []
+        for xmlcontact in addressbook:
+            contact = Contact()
+            attrib = xmlcontact.attrib
+            if 'yahoo-id' in attrib:
+                contact.yahoo_id = attrib['yahoo-id']
+            if 'nickname' in attrib:
+                contact.nickname = attrib['nickname']
+            if 'first-name' in attrib:
+                contact.fname = attrib['first-name']
+            if 'last-name' in attrib:
+                contact.lname = attrib['last-name']
+            if 'mobile' in attrib:
+                contact.mobile = attrib['mobile']
+            if 'msnid' in attrib:
+                contact.msnid = attrib['msnid']
+
+            contacts.append(contact)
+        self._callback(EMUSSA_CALLBACK_ADDRESSBOOK_RECEIVED, contacts)
+
     def _buddies_from_data(self, data):
         buddies = []
 
@@ -340,6 +373,8 @@ class EmussaSession:
             if key == '137':
                 if buddy:
                     buddy.status.idle_time = data[key]
+
+        data.reset()
         return buddies
 
     def _buddy_online(self, data):
@@ -557,4 +592,7 @@ class EmussaSession:
         else:
             tn.status = '0'
         self._send_typing(tn)
+
+    def get_addressbook(self):
+        threading.Thread(target=self._get_addressbook).start()
 

@@ -134,7 +134,7 @@ Called after a message is sent; class PersonalMessage is defined in im.py
 EMUSSA_CALLBACK_STATUS_CHANGED = 12
 """
 Prototype:
-def callback(EmussaSession emussa, Status status)
+def callback(EmussaSession emussa, Status status):
 	///
 
 Called when self status (!!) is changed; class Status is defined in im.py
@@ -144,8 +144,18 @@ Called when self status (!!) is changed; class Status is defined in im.py
 EMUSSA_CALLBACK_SIGNED_OUT = 13
 """
 Prototype:
-def callback(EmussaSession emussa)
+def callback(EmussaSession emussa):
 	///
 
 Called when user is signed out
+"""
+
+
+EMUSSA_CALLBACK_ADDRESSBOOK_RECEIVED = 14
+"""
+Prototype:
+def callback(EmussaSession emussa, list contacts):
+	///
+
+Called when the addressbook was received and parsed. contacts is a list of Contact objects.
 """

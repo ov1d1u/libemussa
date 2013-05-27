@@ -6,13 +6,24 @@ class PersonalInfo:
 		self.country = ''		# Country ID
 
 
+class Contact:
+ 	def __init__(self):
+ 		self.yahoo_id 	= ''
+ 		self.nickname 	= ''
+ 		self.fname 		= ''
+ 		self.lname		= ''
+ 		self.email		= ''
+ 		self.mobile		= ''
+ 		self.msnid		= ''
+
+
 class Buddy:
 	def __init__(self):
-		self.yahoo_id = ''		# buddy's Yahoo! ID
-		self.nickname = ''		# buddy's nickname
-		self.status   = Status()# buddy Status
-		self.settings = Settings() # buddy's settings
-		self.ignored  = False	# buddy is on ignore list
+		self.yahoo_id = ''			# buddy's Yahoo! ID
+		self.status   = Status()	# buddy Status
+		self.settings = Settings() 	# buddy's settings
+		self.contact  = Contact()	# Contact()
+		self.ignored  = False		# buddy is on ignore list
 
 	def __repr__(self):
 		return '<Buddy: "{0}">'.format(self.yahoo_id)
