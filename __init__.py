@@ -1,6 +1,7 @@
 import socket, urllib.parse, urllib.request, threading, time
 import xml.etree.ElementTree as ET
 import queue
+from collections import OrderedDict
 
 from .ypacket import YPacket, InvalidPacket
 from .debug import Debugger
@@ -40,6 +41,7 @@ class EmussaSession:
         self.last_keepalive = 0
         self.y_cookie = self.t_cookie = ''
         self.debug = debug
+        self.buddylist = OrderedDict()
         self.debug.info('Hi, libemussa here!')
 
     def _callback(self, callback_id, *args):
@@ -302,6 +304,7 @@ class EmussaSession:
             if key == '65':
                 group = Group()
                 group.name = data[key]
+                self.buddylist[group] = []
                 self._callback(EMUSSA_CALLBACK_GROUP_RECEIVED, group)
 
             if key == '7':
@@ -310,9 +313,14 @@ class EmussaSession:
                 buddy.status = Status()
                 if mode == '320':
                     buddy.ignored = True
+                self.buddylist[next(reversed(self.buddylist))].append(buddy)
                 self._callback(EMUSSA_CALLBACK_BUDDY_RECEIVED, buddy)
 
+            #if key == '303' and data[key] == '318':
+            #    break
+
         data.reset()
+        self._callback(EMUSSA_CALLBACK_BUDDYLIST_RECEIVED, self.buddylist)
 
     def _get_addressbook(self):
         url =   'http://address.yahoo.com/yab/us?v=XM&prog=ymsgr&.intl=us&diffs=1&t=' \
@@ -373,6 +381,8 @@ class EmussaSession:
             if key == '137':
                 if buddy:
                     buddy.status.idle_time = data[key]
+            if key == '303' and data[key] == '318':
+                break
 
         data.reset()
         return buddies

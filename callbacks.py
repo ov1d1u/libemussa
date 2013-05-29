@@ -89,7 +89,20 @@ Called when a new buddy is received; class Buddy is defined in im.py.
 """
 
 
-EMUSSA_CALLBACK_BUDDY_UPDATE = 8
+EMUSSA_CALLBACK_BUDDYLIST_RECEIVED = 8
+"""
+Prototype:
+def callback(EmussaSession emussa, OrderedDict buddies)
+	///
+
+Called when the receiving of buddylist is done. The format of buddies is:
+buddies['group_name'] = [buddy, buddy, buddy, ...]
+
+Please note that the buddies lists also contains ignored users.
+"""
+
+
+EMUSSA_CALLBACK_BUDDY_UPDATE = 9
 """
 Prototype:
 def callback(EmussaSession emussa, Buddy b)
@@ -99,7 +112,7 @@ Called when a buddy needs to be updated (e.g. changes its status); class Status 
 """
 
 
-EMUSSA_CALLBACK_TYPING_NOTIFY = 9
+EMUSSA_CALLBACK_TYPING_NOTIFY = 10
 """
 Prototype:
 def callback(EmussaSession emussa, TypingNotify tn)
@@ -110,7 +123,7 @@ WARNING: If msg.sender is empty it means that the message was sent by ourselves 
 """
 
 
-EMUSSA_CALLBACK_MESSAGE_IN = 10
+EMUSSA_CALLBACK_MESSAGE_IN = 11
 """
 Prototype:
 def callback(EmussaSession emussa, PersonalMessage msg)
@@ -121,7 +134,7 @@ WARNING: If tn.sender is empty it means that we are typing from another device
 """
 
 
-EMUSSA_CALLBACK_MESSAGE_SENT = 11
+EMUSSA_CALLBACK_MESSAGE_SENT = 12
 """
 Prototype:
 def callback(EmussaSession emussa, PersonalMessage msg)
@@ -131,7 +144,7 @@ Called after a message is sent; class PersonalMessage is defined in im.py
 """
 
 
-EMUSSA_CALLBACK_STATUS_CHANGED = 12
+EMUSSA_CALLBACK_STATUS_CHANGED = 13
 """
 Prototype:
 def callback(EmussaSession emussa, Status status):
@@ -141,7 +154,7 @@ Called when self status (!!) is changed; class Status is defined in im.py
 """
 
 
-EMUSSA_CALLBACK_SIGNED_OUT = 13
+EMUSSA_CALLBACK_SIGNED_OUT = 14
 """
 Prototype:
 def callback(EmussaSession emussa):
@@ -151,7 +164,7 @@ Called when user is signed out
 """
 
 
-EMUSSA_CALLBACK_ADDRESSBOOK_RECEIVED = 14
+EMUSSA_CALLBACK_ADDRESSBOOK_RECEIVED = 15
 """
 Prototype:
 def callback(EmussaSession emussa, list contacts):

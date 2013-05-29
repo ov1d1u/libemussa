@@ -115,6 +115,13 @@ class YDict:
             keys.append(keyval[0])
         return keys
 
+    def keys_list(self, key):
+        keys = []
+        for keyval in self.keyvals:
+            if keyval == key:
+                keys.append(keyval[0])
+        return keys
+
     def values(self):
         values = []
         for keyval in self.keyvals:
