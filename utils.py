@@ -2,6 +2,19 @@ from hashlib import md5
 import base64, os
 
 
+class YKeyVal:
+    def __init__(self, key='', value=''):
+        self.key = key
+        self.value = value
+
+    def __setitem__(self, key, value):
+        self.key = key
+        self.value = value
+
+    def __geitem__(self, key):
+        return self.value
+
+
 class YDict:
     def __init__(self):
         self.keyvals = []
@@ -42,7 +55,7 @@ class YDict:
 
     def __contains__(self, value):
         for keyval in self.keyvals:
-            if keyval[1] == value:
+            if keyval[0] == value:
                 return True
         return False
 
@@ -183,6 +196,12 @@ class YDict:
 
     def get_range(self, key):
         return (0, self._count_key())
+
+    def asKeyVals(self):
+        keyvals = []
+        for key, value in self.keyvals:
+            keyvals.append(YKeyVal(key, value))
+        return keyvals
 
 
 def yahoo_generate_hash(str_data):

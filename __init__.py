@@ -21,8 +21,9 @@ KEEP_ALIVE_TIMEOUT = 30
 debug = Debugger()
 queue = queue.Queue()
 
+
 class EmussaException(Exception):
-    def __init__(self, message, value = EMUSSA_ERROR_UNDEFINED):
+    def __init__(self, message, value=EMUSSA_ERROR_UNDEFINED):
         debug.error(message)
         self.message = message
         self.value = value
@@ -30,19 +31,23 @@ class EmussaException(Exception):
     def __str__(self):
         return self.message
 
+
 class EmussaSession:
     def __init__(self):
+        self.cbs = {}
+        self.debug = debug
+        self.debug.info('Hi, libemussa here!')
+        self._reset()
+
+    def _reset(self):
         self.username = ''
         self.password = ''
-        self.cbs = {}
         self.session_id = b'\x00\x00\x00\x00'
         self.is_invisible = False
         self.is_connected = False
         self.last_keepalive = 0
         self.y_cookie = self.t_cookie = ''
-        self.debug = debug
         self.buddylist = OrderedDict()
-        self.debug.info('Hi, libemussa here!')
 
     def _callback(self, callback_id, *args):
         if callback_id in self.cbs:
@@ -73,7 +78,8 @@ class EmussaSession:
         if self.is_connected:
             self.is_connected = False
             self.s.shutdown(socket.SHUT_WR)
-            queue.put(None) # put this in queue to force stopping the sender thread
+            queue.put(None)  # put this in queue to force stopping the sender thread
+        self._reset()
         self._callback(EMUSSA_CALLBACK_DISCONNECTED)
 
     def _listener(self):
@@ -144,12 +150,17 @@ class EmussaSession:
         if y.service == YAHOO_SERVICE_AUTH:
             challenge = y.data['94']
             self._auth_response(challenge)
-        
+
         elif y.service == YAHOO_SERVICE_LIST:
             self._received_own_contact(y.data)
-        
+
         elif y.service == YAHOO_SERVICE_LIST_15:
-            self._received_buddylist(y.data)
+            if y.status == YAHOO_STATUS_AVAILABLE:
+                # List complete
+                self._received_buddylist(y.data, True)
+            else:
+                # This is just a part of the list
+                self._received_buddylist(y.data, False)
 
         elif y.service == YAHOO_SERVICE_STATUS_15:
             self._buddy_online(y.data)
@@ -293,34 +304,29 @@ class EmussaSession:
         debug.info('Starting keepalive thread')
         threading.Thread(target=self._keepalive).start()
 
-    def _received_buddylist(self, data):
-        debug.info('Received buddylist')
-
+    def _received_buddylist(self, data, complete=False):
         mode = ''
-        for key in data:
-            if key == '300':
-                mode = data[key]
+        for kv in data.asKeyVals():
+            if kv.key == '300':
+                mode = kv.value
 
-            if key == '65':
+            if kv.key == '65':
                 group = Group()
-                group.name = data[key]
+                group.name = kv.value
                 self.buddylist[group] = []
                 self._callback(EMUSSA_CALLBACK_GROUP_RECEIVED, group)
 
-            if key == '7':
+            if kv.key == '7':
                 buddy = Buddy()
-                buddy.yahoo_id = data[key]
+                buddy.yahoo_id = kv.value
                 buddy.status = Status()
                 if mode == '320':
                     buddy.ignored = True
                 self.buddylist[next(reversed(self.buddylist))].append(buddy)
                 self._callback(EMUSSA_CALLBACK_BUDDY_RECEIVED, buddy)
 
-            #if key == '303' and data[key] == '318':
-            #    break
-
-        data.reset()
-        self._callback(EMUSSA_CALLBACK_BUDDYLIST_RECEIVED, self.buddylist)
+        if complete:
+            self._callback(EMUSSA_CALLBACK_BUDDYLIST_RECEIVED, self.buddylist)
 
     def _get_addressbook(self):
         url =   'http://address.yahoo.com/yab/us?v=XM&prog=ymsgr&.intl=us&diffs=1&t=' \
@@ -358,33 +364,30 @@ class EmussaSession:
         buddies = []
 
         buddy = None
-        for key in data:
-            if key == '7':
+        for kv in data.asKeyVals():
+            if kv.key == '7':
                 buddy = Buddy()
-                buddy.yahoo_id = data[key]
+                buddy.yahoo_id = kv.value
                 buddy.status = Status()
                 buddies.append(buddy)
-            if key == '10':
+            if kv.key == '10':
                 if buddy:
                     buddy.status.online = True
-            if key == '19':
+            if kv.key == '19':
                 if buddy:
-                    buddy.status.message = data[key]
-            if key == '47':
+                    buddy.status.message = kv.value
+            if kv.key == '47':
                 if buddy:
-                    if data[key] == '0':
+                    if kv.value == '0':
                         buddy.status.code = YAHOO_STATUS_AVAILABLE
-                    elif data[key] == '1':
+                    elif kv.value == '1':
                         buddy.status.code = YAHOO_STATUS_BUSY
-                    elif data[key] == '2':
+                    elif kv.value == '2':
                         buddy.status.code = YAHOO_STATUS_BRB
-            if key == '137':
+            if kv.key == '137':
                 if buddy:
-                    buddy.status.idle_time = data[key]
-            if key == '303' and data[key] == '318':
-                break
+                    buddy.status.idle_time = kv.value
 
-        data.reset()
         return buddies
 
     def _buddy_online(self, data):
@@ -429,29 +432,29 @@ class EmussaSession:
         messages = []
 
         msg = None
-        for key in data:
-            if key == '4':
+        for kv in data.asKeyVals():
+            if kv.key == '4':
                 msg = PersonalMessage()
                 msg.offline = offline
-                msg.sender = data['4']
+                msg.sender = kv.value
 
-            if key == '1' and not msg:
+            if kv.key == '1' and not msg:
                 # this is a message we sent from another device
                 msg = PersonalMessage()
 
-            if key == '5' and msg:
-                msg.receiver = data['5']
+            if kv.key == '5' and msg:
+                msg.receiver = kv.value
 
-            if key == '15' and msg:
-                msg.timestamp = data['15']
+            if kv.key == '15' and msg:
+                msg.timestamp = kv.value
 
-            if key == '14' and msg:
-                msg.message = data['14']
+            if kv.key == '14' and msg:
+                msg.message = kv.value
 
-            if key == '429' and msg:
-                msg.id = data['429']
+            if kv.key == '429' and msg:
+                msg.id = kv.value
 
-            if key == '455' and msg:
+            if kv.key == '455' and msg:
                 # end of message
                 messages.append(msg)
                 msg = None
