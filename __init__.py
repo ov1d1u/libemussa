@@ -48,6 +48,7 @@ class EmussaSession:
         self.last_keepalive = 0
         self.y_cookie = self.t_cookie = ''
         self.buddylist = OrderedDict()
+        self.addressbook = []
 
     def _callback(self, callback_id, *args):
         if callback_id in self.cbs:
@@ -180,6 +181,25 @@ class EmussaSession:
 
         elif y.service == YAHOO_SERVICE_SETTINGS:
             self._set_settings(y.data)
+
+        elif y.service == YAHOO_SERVICE_ADD_BUDDY:
+            if y.status == YAHOO_RETCODE_OK:
+                self._add_request_response(y.data)
+
+        elif y.service == YAHOO_SERVICE_AUTH_REQ_15:
+            self._add_auth_response(y.data)
+
+        elif y.service == YAHOO_SERVICE_REMOVE_BUDDY:
+            if y.status == YAHOO_RETCODE_OK:
+                self._remove_buddy_response(y.data)
+            elif y.status == YAHOO_STATUS_AVAILABLE:
+                self._remove_buddy(y.data)
+
+        elif y.service == YAHOO_SERVICE_CHANGE_GROUP:
+            if y.status == YAHOO_RETCODE_OK:
+                self._move_buddy_response(y.data)
+            elif y.status == YAHOO_STATUS_AVAILABLE:
+                self._move_buddy(y.data)
 
         else:
             debug.warning('Unknown packet of type {0}, skipping'.format(hex(y.service)))
@@ -320,10 +340,15 @@ class EmussaSession:
                 buddy = Buddy()
                 buddy.yahoo_id = kv.value
                 buddy.status = Status()
+                buddy.status.code = YAHOO_STATUS_OFFLINE
                 if mode == '320':
                     buddy.ignored = True
                 self.buddylist[next(reversed(self.buddylist))].append(buddy)
                 self._callback(EMUSSA_CALLBACK_BUDDY_RECEIVED, buddy)
+
+            if kv.key == '223':
+                if kv.value == '1' and buddy:
+                    buddy.pending = True
 
         if complete:
             self._callback(EMUSSA_CALLBACK_BUDDYLIST_RECEIVED, self.buddylist)
@@ -340,7 +365,6 @@ class EmussaSession:
         xmldata = req.read()
         addressbook = ET.fromstring(xmldata)
 
-        contacts = []
         for xmlcontact in addressbook:
             contact = Contact()
             attrib = xmlcontact.attrib
@@ -356,9 +380,11 @@ class EmussaSession:
                 contact.mobile = attrib['mobile']
             if 'msnid' in attrib:
                 contact.msnid = attrib['msnid']
+            if 'email' in attrib:
+                contact.email = attrib['email']
 
-            contacts.append(contact)
-        self._callback(EMUSSA_CALLBACK_ADDRESSBOOK_RECEIVED, contacts)
+            self.addressbook.append(contact)
+        self._callback(EMUSSA_CALLBACK_ADDRESSBOOK_RECEIVED, self.addressbook)
 
     def _buddies_from_data(self, data):
         buddies = []
@@ -369,6 +395,7 @@ class EmussaSession:
                 buddy = Buddy()
                 buddy.yahoo_id = kv.value
                 buddy.status = Status()
+                buddy.status.code = YAHOO_STATUS_AVAILABLE
                 buddies.append(buddy)
             if kv.key == '10':
                 if buddy:
@@ -396,21 +423,24 @@ class EmussaSession:
 
         for ub in updated_buddies:
             self._callback(EMUSSA_CALLBACK_BUDDY_UPDATE, ub)
+        self._callback(EMUSSA_CALLBACK_BUDDY_UPDATE_LIST, updated_buddies)
 
     def _buddy_offline(self, data):
         debug.info('Set buddy offline')
-        buddy = Buddy()
-        buddy.yahoo_id = data['7']
-        buddy.status = Status()
-        buddy.status.online = False
-        self._callback(EMUSSA_CALLBACK_BUDDY_UPDATE, buddy)
+        buddies = self._buddies_from_data(data)
+        for buddy in buddies:
+            buddy.yahoo_id = data['7']
+            buddy.status = Status()
+            buddy.status.online = False
+            self._callback(EMUSSA_CALLBACK_BUDDY_UPDATE, buddy)
+        self._callback(EMUSSA_CALLBACK_BUDDY_UPDATE_LIST, buddies)
 
     def _buddy_changed_status(self, data):
         debug.info('Update buddy status')
         buddies = self._buddies_from_data(data)
-        if buddies:
-            buddy = self._buddies_from_data(data)[0]
+        for buddy in buddies:
             self._callback(EMUSSA_CALLBACK_BUDDY_UPDATE, buddy)
+        self._callback(EMUSSA_CALLBACK_BUDDY_UPDATE_LIST, buddies)
 
     def _typing(self, data):
         typing = TypingNotify()
@@ -424,7 +454,7 @@ class EmussaSession:
             debug.info('End typing: {0}'.format(typing.sender))
         self._callback(EMUSSA_CALLBACK_TYPING_NOTIFY, typing)
 
-    def _message_received(self, data, offline = False):
+    def _message_received(self, data, offline=False):
         if offline:
             debug.info('Got offline messages')
         else:
@@ -539,8 +569,96 @@ class EmussaSession:
         y.data['13'] = tn.status
         self._send(y)
 
+    def _send_add_request(self, add):
+        y = YPacket()
+        y.service = YAHOO_SERVICE_ADD_BUDDY
+        y.status = YAHOO_STATUS_AVAILABLE
+        y.data['65'] = add.group
+        y.data['97'] = '1'
+        y.data['14'] = add.message
+        y.data['302'] = '319'
+        y.data['300'] = '319'
+        y.data['7'] = add.yahoo_id
+        y.data['301'] = '319'
+        y.data['303'] = '319'
+        y.data['216'] = add.fname
+        y.data['254'] = add.lname
+        y.data['1'] = add.sender
+        self._send(y)
+
+    def _send_remove_buddy(self, rem):
+        y = YPacket()
+        y.service = YAHOO_SERVICE_REMOVE_BUDDY
+        y.status = YAHOO_STATUS_AVAILABLE
+        y.data['1'] = rem.sender
+        y.data['7'] = rem.yahoo_id
+        y.data['241'] = '0'
+        y.data['65'] = rem.group
+        self._send(y)
+
+    def _send_move_buddy(self, mv):
+        y = YPacket()
+        y.service = YAHOO_SERVICE_CHANGE_GROUP
+        y.status = YAHOO_STATUS_AVAILABLE
+        y.data['1'] = mv.sender
+        y.data['302'] = '240'
+        y.data['300'] = '240'
+        y.data['7'] = mv.yahoo_id
+        y.data['224'] = mv.from_group
+        y.data['264'] = mv.to_group
+        y.data['301'] = '240'
+        y.data['303'] = '240'
+        self._send(y)
+
+    def _add_request_response(self, data):
+        re = AddRequestResponse()
+        re.sender = data['1']
+        re.yahoo_id = data['7']
+        re.group = data['65']
+        if data['66'] == '0':
+            re.success = True
+        self._callback(EMUSSA_CALLBACK_ADDRESPONSE, re)
+
+    def _add_auth_response(self, data):
+        auth = BuddyAuthorization()
+        auth.sender = data['4']
+        auth.receiver = data['5']
+        auth.response = int(data['13'])
+        if '14' in data:
+            auth.message = data['14']
+        self._callback(EMUSSA_CALLBACK_ADD_AUTHRESPONSE, auth)
+
+    def _remove_buddy_response(self, data):
+        rem = RemoveBuddy()
+        rem.sender = data['1']
+        rem.yahoo_id = data['7']
+        rem.group = data['65']
+        self._callback(EMUSSA_CALLBACK_REMRESPONSE, rem)
+
+    def _remove_buddy(self, data):
+        rem = RemoveBuddy()
+        rem.sender = data['1']
+        rem.yahoo_id = data['7']
+        rem.group = data['65']
+        self._callback(EMUSSA_CALLBACK_REMOVEBUDDY, rem)
+
+    def _move_buddy_response(self, data):
+        mv = MoveBuddy()
+        mv.sender = data['1']
+        mv.yahoo_id = data['7']
+        mv.from_group = data['224']
+        mv.to_group = data['264']
+        self._callback(EMUSSA_CALLBACK_MOVERESPONSE, mv)
+
+    def _move_buddy(self, data):
+        mv = MoveBuddy()
+        mv.sender = data['1']
+        mv.yahoo_id = data['7']
+        mv.from_group = data['224']
+        mv.to_group = data['264']
+        self._callback(EMUSSA_CALLBACK_MOVEBUDDY, mv)
+
     def _set_settings(self, data):
-        print ('SETTINGS')
         raw_data = data['211']
         yahoo_parse_settings(raw_data)
 
@@ -607,5 +725,34 @@ class EmussaSession:
         self._send_typing(tn)
 
     def get_addressbook(self):
+        debug.info('Send addressbook request')
         threading.Thread(target=self._get_addressbook).start()
 
+    def add_buddy(self, yahoo_id, group, message, fname, lname, service=1):
+        debug.info('Adding {0} to {1}'.format(yahoo_id, group))
+        add = AddRequest()
+        add.sender = self.username
+        add.yahoo_id = yahoo_id
+        add.group = group
+        add.message = message
+        add.fname = fname
+        add.lname = lname
+        add.service = service
+        self._send_add_request(add)
+
+    def remove_buddy(self, yahoo_id, group):
+        debug.info('Removing {0} from {1}'.format(yahoo_id, group))
+        rem = RemoveBuddy()
+        rem.sender = self.username
+        rem.yahoo_id = yahoo_id
+        rem.group = group
+        self._send_remove_buddy(rem)
+
+    def move_buddy(self, yahoo_id, from_group, to_group):
+        debug.info('Moving {0} from {1} to {2}'.format(yahoo_id, from_group, to_group))
+        mv = MoveBuddy()
+        mv.sender = self.username
+        mv.yahoo_id = yahoo_id
+        mv.from_group = from_group
+        mv.to_group = to_group
+        self._send_move_buddy(mv)
