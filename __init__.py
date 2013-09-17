@@ -1,5 +1,4 @@
 import socket, urllib.parse, urllib.request, threading, time
-import xml.etree.ElementTree as ET
 import queue
 from collections import OrderedDict
 
@@ -103,8 +102,8 @@ class EmussaSession:
                 self._process_packet(y)
             except InvalidPacket:
                 debug.warning('Invalid packet received, skipping')
-            #except:
-            #    debug.warning('Error while reading data packet')
+            except:
+                debug.error('Unexpected error while reading data packed')
         debug.info('Listener thread ended.')
         self.is_connected = False
 
@@ -187,7 +186,12 @@ class EmussaSession:
                 self._add_request_response(y.data)
 
         elif y.service == YAHOO_SERVICE_AUTH_REQ_15:
-            self._add_auth_response(y.data)
+            if y.status == YAHOO_ADD_REQUEST_AUTHORIZED:
+                self._add_auth_response_accept(y.data)
+            if y.status == YAHOO_ADD_REQUEST_DENIED:
+                self._add_auth_response_rejected(y.data)
+            if y.status == YAHOO_ADD_REQUEST_ASK:
+                self._auth_request(y.data)
 
         elif y.service == YAHOO_SERVICE_REMOVE_BUDDY:
             if y.status == YAHOO_RETCODE_OK:
@@ -200,6 +204,9 @@ class EmussaSession:
                 self._move_buddy_response(y.data)
             elif y.status == YAHOO_STATUS_AVAILABLE:
                 self._move_buddy(y.data)
+
+        elif y.service == YAHOO_SERVICE_AUDIBLE:
+            self._audible_received(y.data)
 
         else:
             debug.warning('Unknown packet of type {0}, skipping'.format(hex(y.service)))
@@ -354,37 +361,29 @@ class EmussaSession:
             self._callback(EMUSSA_CALLBACK_BUDDYLIST_RECEIVED, self.buddylist)
 
     def _get_addressbook(self):
-        url =   'http://address.yahoo.com/yab/us?v=XM&prog=ymsgr&.intl=us&diffs=1&t=' \
-                '0&tags=long&rt=0&prog-ver={0}&useutf8=1&legenc=codepage-1252'.format(
-                    CLIENT_VERSION
-                    )
+        url = 'http://address.yahoo.com/yab/us?v=XM&prog=ymsgr&.intl=us&diffs=1&t=' \
+              '0&tags=short&rt=0&prog-ver={0}&useutf8=1&legenc=codepage-1252'.format(
+              CLIENT_VERSION)
         opener = urllib.request.build_opener()
         opener.addheaders = [('User-agent', 'Mozilla/4.0 (compatible; MSIE 5.5)')]
         opener.addheaders.append(('Cookie', 'Y={0}; T={1}'.format(self.y_cookie, self.t_cookie)))
         req = opener.open(url)
         xmldata = req.read()
-        addressbook = ET.fromstring(xmldata)
+        self.addressbook = utils.contacts_from_xml(xmldata)
 
-        for xmlcontact in addressbook:
-            contact = Contact()
-            attrib = xmlcontact.attrib
-            if 'yahoo-id' in attrib:
-                contact.yahoo_id = attrib['yahoo-id']
-            if 'nickname' in attrib:
-                contact.nickname = attrib['nickname']
-            if 'first-name' in attrib:
-                contact.fname = attrib['first-name']
-            if 'last-name' in attrib:
-                contact.lname = attrib['last-name']
-            if 'mobile' in attrib:
-                contact.mobile = attrib['mobile']
-            if 'msnid' in attrib:
-                contact.msnid = attrib['msnid']
-            if 'email' in attrib:
-                contact.email = attrib['email']
-
-            self.addressbook.append(contact)
         self._callback(EMUSSA_CALLBACK_ADDRESSBOOK_RECEIVED, self.addressbook)
+
+    def _update_contact(self, contact):
+        # Build xml data
+        xmldata = '<?xml version="1.0" encoding="utf-8"?><ab k="{0}" cc="1">'\
+                  '{1}</ab>'.format(self.username, utils.contact_to_xml(contact)).encode()
+
+        url = 'http://address.yahoo.com/yab/us?v=XM&prog=ymsgr' \
+              '&.intl=us&sync=1&tags=short&noclear=1&useutf8=1&legenc=codepage-1252'
+        opener = urllib.request.build_opener()
+        opener.addheaders = [('User-agent', 'Mozilla/4.0 (compatible; MSIE 5.5)')]
+        opener.addheaders.append(('Cookie', 'Y={0}; T={1}'.format(self.y_cookie, self.t_cookie)))
+        opener.open(url, xmldata)
 
     def _buddies_from_data(self, data):
         buddies = []
@@ -617,16 +616,56 @@ class EmussaSession:
         re.group = data['65']
         if data['66'] == '0':
             re.success = True
-        self._callback(EMUSSA_CALLBACK_ADDRESPONSE, re)
+        self._callback(EMUSSA_CALLBACK_AUTH_RESPONSE, re)
 
-    def _add_auth_response(self, data):
+    def _add_auth_response_accept(self, data):
         auth = BuddyAuthorization()
         auth.sender = data['4']
         auth.receiver = data['5']
-        auth.response = int(data['13'])
+        auth.response = YAHOO_ADD_REQUEST_AUTHORIZED
         if '14' in data:
             auth.message = data['14']
-        self._callback(EMUSSA_CALLBACK_ADD_AUTHRESPONSE, auth)
+        self._callback(EMUSSA_CALLBACK_AUTH_ACCEPTED, auth)
+
+    def _add_auth_response_rejected(self, data):
+        auth = BuddyAuthorization()
+        auth.sender = data['4']
+        auth.receiver = data['5']
+        auth.response = YAHOO_ADD_REQUEST_DENIED
+        if '14' in data:
+            auth.message = data['14']
+        self._callback(EMUSSA_CALLBACK_AUTH_REJECTED, auth)
+
+    def _auth_request(self, data):
+        debug.info('Auth response received')
+        auth = BuddyAuthorization()
+        auth.sender = data['4']
+        auth.receiver = data['5']
+        auth.fname = data['216']
+        auth.lname = data['254']
+        auth.response = YAHOO_ADD_REQUEST_ASK
+        if '14' in data:
+            auth.message = data['14']
+        self._callback(EMUSSA_CALLBACK_AUTH_REQUEST, auth)
+
+    def _reject_auth_request(self, auth):
+        y = YPacket()
+        y.service = YAHOO_SERVICE_AUTH_REQ_15
+        y.status = YAHOO_STATUS_AVAILABLE
+        y.data['1'] = auth.sender
+        y.data['5'] = auth.receiver
+        y.data['13'] = '2'
+        y.data['14'] = auth.message
+        self._send(y)
+
+    def _accept_auth_request(self, auth):
+        y = YPacket()
+        y.service = YAHOO_SERVICE_AUTH_REQ_15
+        y.status = YAHOO_STATUS_AVAILABLE
+        y.data['1'] = auth.sender
+        y.data['5'] = auth.receiver
+        y.data['13'] = '1'
+        self._send(y)
 
     def _remove_buddy_response(self, data):
         rem = RemoveBuddy()
@@ -657,6 +696,16 @@ class EmussaSession:
         mv.from_group = data['224']
         mv.to_group = data['264']
         self._callback(EMUSSA_CALLBACK_MOVEBUDDY, mv)
+
+    def _audible_received(self, data):
+        debug.info('Audible received')
+        a = Audible()
+        a.sender = data['4']
+        a.receiver = data['5']
+        a.name = data['230']
+        a.url = '{0}/{1}/{2}.swf'.format(a.base_url, a.name.split('.')[1], a.name)
+        a.message = data['231']
+        self._callback(EMUSSA_CALLBACK_AUDIBLE_RECEIVED, a)
 
     def _set_settings(self, data):
         raw_data = data['211']
@@ -756,3 +805,23 @@ class EmussaSession:
         mv.from_group = from_group
         mv.to_group = to_group
         self._send_move_buddy(mv)
+
+    def reject_auth_request(self, yahoo_id, message=''):
+        debug.info('Rejecting add request from {0}'.format(yahoo_id))
+        auth = BuddyAuthorization()
+        auth.sender = self.username
+        auth.receiver = yahoo_id
+        auth.response = 2
+        auth.message = message
+        self._reject_auth_request(auth)
+
+    def accept_auth_request(self, yahoo_id):
+        debug.info('Accepting add request from {0}'.format(yahoo_id))
+        auth = BuddyAuthorization()
+        auth.sender = self.username
+        auth.receiver = yahoo_id
+        auth.response = 1
+        self._accept_auth_request(auth)
+
+    def update_contact(self, contact):
+        threading.Thread(target=self._update_contact, args=(contact,)).start()

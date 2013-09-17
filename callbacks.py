@@ -173,7 +173,7 @@ Called when the addressbook was received and parsed. contacts is a list of Conta
 """
 
 
-EMUSSA_CALLBACK_ADDRESPONSE = 16
+EMUSSA_CALLBACK_AUTH_RESPONSE = 16
 """
 Prototype:
 def callback(EmussaSession emussa, AddRequestResponse re):
@@ -183,18 +183,40 @@ Called when an AddRequestResponse is received; class AddRequestResponse is defin
 """
 
 
-EMUSSA_CALLBACK_ADD_AUTHRESPONSE = 17
+EMUSSA_CALLBACK_AUTH_ACCEPTED = 17
 """
 Prototype:
 def callback(EmussaSession emussa, BuddyAuthorization auth):
     ///
 
-Called when somebody added or rejected our add request; class BuddyAuthorization is defined
+Called when somebody accepted our add request; class BuddyAuthorization is defined
 in im.py
 """
 
 
-EMUSSA_CALLBACK_BUDDY_UPDATE_LIST = 18
+EMUSSA_CALLBACK_AUTH_REJECTED = 18
+"""
+Prototype:
+def callback(EmussaSession emussa, BuddyAuthorization auth):
+    ///
+
+Called when somebody rejected our add request; class BuddyAuthorization is defined
+in im.py
+"""
+
+
+EMUSSA_CALLBACK_AUTH_REQUEST = 19
+"""
+Prototype:
+def callback(EmussaSession emussa, BuddyAuthorization auth):
+    ///
+
+Called when somebody ask to allow him adding us in his buddylist; class
+BuddyAuthorization is defined in im.py
+"""
+
+
+EMUSSA_CALLBACK_BUDDY_UPDATE_LIST = 20
 """
 Prototype:
 def callback(EmussaSession emussa, list updated_buddies):
@@ -206,7 +228,7 @@ a list of buddies with their new properties.
 """
 
 
-EMUSSA_CALLBACK_REMRESPONSE = 19
+EMUSSA_CALLBACK_REMRESPONSE = 21
 """
 Prototype:
 def callback(EmussaSession emussa, RemoveBuddy rem):
@@ -217,7 +239,7 @@ in im.py
 """
 
 
-EMUSSA_CALLBACK_REMOVEBUDDY = 20
+EMUSSA_CALLBACK_REMOVEBUDDY = 22
 """
 Prototype:
 def callback(EmussaSession emussa, RemoveBuddy rem):
@@ -228,7 +250,7 @@ device connected with the same account. RemoveBuddy is defined in im.py
 """
 
 
-EMUSSA_CALLBACK_MOVERESPONSE = 21
+EMUSSA_CALLBACK_MOVERESPONSE = 23
 """
 Prototype:
 def callback(EmussaSession emussa, MoveBuddy mv):
@@ -239,7 +261,7 @@ in im.py
 """
 
 
-EMUSSA_CALLBACK_MOVEBUDDY = 22
+EMUSSA_CALLBACK_MOVEBUDDY = 24
 """
 Prototype:
 def callback(EmussaSession emussa, MoveBuddy mv):
@@ -247,4 +269,14 @@ def callback(EmussaSession emussa, MoveBuddy mv):
 
 Called when a remote buddy move occur, usually when a buddy was moved from another
 device connected with the same account. MoveBuddy is defined in im.py
+"""
+
+
+EMUSSA_CALLBACK_AUDIBLE_RECEIVED = 25
+"""
+Prototype:
+def callback(EmussaSession emussa, Audible a):
+    ///
+
+Called when an audible message is received. Audible is defined in im.py
 """

@@ -8,20 +8,51 @@ class PersonalInfo:
 
 class Contact:
     def __init__(self):
-        self.yahoo_id   = ''
-        self.nickname   = ''
-        self.fname      = ''
-        self.lname      = ''
-        self.email      = ''
-        self.mobile     = ''
-        self.msnid      = ''
+        self.id             = ''
+        self.yahoo_id       = ''
+        self.nickname       = ''
+        self.fname          = ''
+        self.mname          = ''
+        self.lname          = ''
+        self.email          = ''
+        self.email1         = ''
+        self.email2         = ''
+        self.mobile         = ''
+        self.msnid          = ''
+        self.note1          = ''
+        self.note2          = ''
+        self.note3          = ''
+        self.note4          = ''
+        self.home_addr      = ''
+        self.home_city      = ''
+        self.home_state     = ''
+        self.home_zip       = ''
+        self.home_country   = ''
+        self.home_phone     = ''
+        self.work_company   = ''
+        self.work_addr      = ''
+        self.work_city      = ''
+        self.work_state     = ''
+        self.work_zip       = ''
+        self.work_country   = ''
+        self.work_phone     = ''
+        self.birthday       = ''
+        self.anniversary    = ''
+        self.note           = ''
+        self.fax            = ''
+        self.skype          = ''
+        self.other_phone    = ''
+        self.pager          = ''
+        self.website        = ''
+        self.job_title      = ''
+        self.work_website   = ''
 
 
 class Buddy:
     def __init__(self):
         self.yahoo_id = ''          # buddy's Yahoo! ID
         self.status   = Status()    # buddy Status
-        self.settings = Settings()  # buddy's settings
+        self.settings = Settings()  # buddy's settings (only for self-buddy)
         self.contact  = Contact()   # Contact()
         self.ignored  = False       # buddy is on ignore list
         self.pending  = False       # buddy is pending add request confirmation
@@ -96,7 +127,9 @@ class BuddyAuthorization:
     def __init__(self):
         self.sender = ''
         self.receiver = ''
-        self.response = 2
+        self.response = 0
+        self.fname = ''
+        self.lname = ''
         self.message = ''
 
 
@@ -113,3 +146,17 @@ class MoveBuddy:
         self.yahoo_id = ''
         self.from_group = ''
         self.to_group = ''
+
+
+class Audible:
+    @property
+    def base_url(self):
+        return 'http://l.yimg.com/pu/dl/aud/'
+
+    def __init__(self):
+        self.sender = ''
+        self.receiver = ''
+        self.url = ''
+        self.name = ''
+        self.message = ''
+        self.checksum = ''

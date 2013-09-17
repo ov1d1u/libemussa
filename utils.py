@@ -1,5 +1,8 @@
-from hashlib import md5 
+from hashlib import md5
 import base64, os
+import time
+from .im import Contact
+import xml.etree.ElementTree as ET
 
 
 class YKeyVal:
@@ -71,7 +74,7 @@ class YDict:
 
     def _filter_by_key(self, key):
         l = []
-        for keyval in self.keyvals: 
+        for keyval in self.keyvals:
             if keyval[0] == key:
                 l.append(keyval)
         return l
@@ -216,5 +219,179 @@ def yahoo_generate_hash(str_data):
 
     return ybase64.decode()
 
-def yahoo_parse_settings(str_data):
-    print(data)
+
+def contact_from_xml(xml_data):
+    xmlcontact = ET.fromstring(xml_data)
+    contact = Contact()
+    attrib = xmlcontact.attrib
+    if 'id' in attrib:
+        contact.id = attrib['id']
+    if 'yi' in attrib:
+        contact.yahoo_id = attrib['yi']
+    if 'nn' in attrib:
+        contact.nickname = attrib['nn']
+    if 'fn' in attrib:
+        contact.fname = attrib['fn']
+    if 'mn' in attrib:
+        contact.mname = attrib['mn']
+    if 'ln' in attrib:
+        contact.lname = attrib['ln']
+    if 'mo' in attrib:
+        contact.mobile = attrib['mo']
+    if 'msnid' in attrib:
+        contact.msnid = attrib['msnid']
+    if 'e0' in attrib:
+        contact.email = attrib['e0']
+    if 'e1' in attrib:
+        contact.email1 = attrib['e1']
+    if 'e2' in attrib:
+        contact.email2 = attrib['e2']
+    if 'c1' in attrib:
+        contact.note1 = attrib['c1']
+    if 'c2' in attrib:
+        contact.note2 = attrib['c2']
+    if 'c3' in attrib:
+        contact.note3 = attrib['c3']
+    if 'c4' in attrib:
+        contact.note4 = attrib['c4']
+    if 'ha' in attrib:
+        contact.home_addr = attrib['ha']
+    if 'hc' in attrib:
+        contact.home_city = attrib['hc']
+    if 'hs' in attrib:
+        contact.home_state = attrib['hs']
+    if 'hz' in attrib:
+        contact.home_zip = attrib['hz']
+    if 'hn' in attrib:
+        contact.home_country = attrib['hn']
+    if 'wa' in attrib:
+        contact.work_addr = attrib['wa']
+    if 'wc' in attrib:
+        contact.work_city = attrib['wc']
+    if 'ws' in attrib:
+        contact.work_state = attrib['ws']
+    if 'wz' in attrib:
+        contact.work_zip = attrib['wz']
+    if 'wn' in attrib:
+        contact.work_country = attrib['wn']
+    if 'an' in attrib:
+        contact.anniversary = attrib['an']
+    if 'bi' in attrib:
+        contact.birthday = attrib['bi']
+    if 'cm' in attrib:
+        contact.note = attrib['cm']
+    if 'co' in attrib:
+        contact.work_company = attrib['co']
+    if 'fa' in attrib:
+        contact.fax = attrib['fa']
+    if 'hp' in attrib:
+        contact.home_phone = attrib['hp']
+    if 'imk' in attrib:
+        contact.skype = attrib['imk']
+    if 'ot' in attrib:
+        contact.other_phone = attrib['ot']
+    if 'pa' in attrib:
+        contact.pager = attrib['pa']
+    if 'pu' in attrib:
+        contact.website = attrib['pu']
+    if 'ti' in attrib:
+        contact.job_title = attrib['ti']
+    if 'wp' in attrib:
+        contact.work_phone = attrib['wp']
+    if 'wu' in attrib:
+        contact.work_website = attrib['wu']
+    return contact
+
+
+def contact_to_xml(contact):
+    if not contact.yahoo_id:    # yahoo_id required when creating a XML contact
+        return None
+    ct = ET.Element('ct')
+    if contact.id:
+        ct.attrib['e'] = '1'
+        ct.attrib['id'] = contact.id
+    else:
+        ct.attrib['a'] = '1'
+    if contact.yahoo_id:
+        ct.attrib['yi'] = contact.yahoo_id
+    if contact.fname:
+        ct.attrib['fn'] = contact.fname
+    if contact.mname:
+        ct.attrib['mn'] = contact.mname
+    if contact.lname:
+        ct.attrib['ln'] = contact.lname
+    if contact.nickname:
+        ct.attrib['nn'] = contact.nickname
+    if contact.email:
+        ct.attrib['e0'] = contact.email
+    if contact.home_phone:
+        ct.attrib['hp'] = contact.home_phone
+    if contact.work_phone:
+        ct.attrib['wp'] = contact.work_phone
+    if contact.mobile:
+        ct.attrib['mo'] = contact.mobile
+    if contact.job_title:
+        ct.attrib['ti'] = contact.job_title
+    if contact.fax:
+        ct.attrib['fa'] = contact.fax
+    if contact.pager:
+        ct.attrib['pa'] = contact.pager
+    if contact.other_phone:
+        ct.attrib['ot'] = contact.other_phone
+    if contact.email1:
+        ct.attrib['e1'] = contact.email1
+    if contact.email2:
+        ct.attrib['e2'] = contact.email2
+    if contact.website:
+        ct.attrib['pu'] = contact.website
+    if contact.home_addr:
+        ct.attrib['ha'] = contact.home_addr
+    if contact.home_city:
+        ct.attrib['hc'] = contact.home_city
+    if contact.home_state:
+        ct.attrib['hs'] = contact.home_state
+    if contact.home_zip:
+        ct.attrib['hz'] = contact.home_zip
+    if contact.home_country:
+        ct.attrib['hn'] = contact.home_country
+    if contact.work_company:
+        ct.attrib['co'] = contact.work_company
+    if contact.work_addr:
+        ct.attrib['wa'] = contact.work_addr
+    if contact.work_city:
+        ct.attrib['wc'] = contact.work_city
+    if contact.work_state:
+        ct.attrib['ws'] = contact.work_state
+    if contact.work_zip:
+        ct.attrib['wz'] = contact.work_zip
+    if contact.work_country:
+        ct.attrib['wn'] = contact.work_country
+    if contact.work_website:
+        ct.attrib['wu'] = contact.work_website
+    if contact.birthday:
+        ct.attrib['bi'] = contact.birthday
+    if contact.anniversary:
+        ct.attrib['an'] = contact.anniversary
+    if contact.note:
+        ct.attrib['cm'] = contact.note
+    if contact.note1:
+        ct.attrib['c1'] = contact.note1
+    if contact.note2:
+        ct.attrib['c2'] = contact.note2
+    if contact.note3:
+        ct.attrib['c3'] = contact.note3
+    if contact.note4:
+        ct.attrib['c4'] = contact.note4
+    if contact.skype:
+        ct.attrib['imk'] = contact.skype
+    return ET.tostring(ct)
+
+
+def contacts_from_xml(xml_data):
+    contacts = []
+    addressbook = ET.fromstring(xml_data)
+
+    for xmlcontact in addressbook:
+        contact = contact_from_xml(ET.tostring(xmlcontact))
+        contacts.append(contact)
+    return contacts
