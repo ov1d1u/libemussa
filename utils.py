@@ -1,8 +1,11 @@
-from hashlib import md5
 import base64, os
-import time
-from .im import Contact
 import xml.etree.ElementTree as ET
+import time
+import urllib.request
+import json
+import random
+from hashlib import md5
+from .im import Contact
 
 
 class YKeyVal:
@@ -395,3 +398,33 @@ def contacts_from_xml(xml_data):
         contact = contact_from_xml(ET.tostring(xmlcontact))
         contacts.append(contact)
     return contacts
+
+def download_display_image(yahoo_id, t_cookie, y_cookie):
+    req = urllib.request.Request(
+        'http://rest-img.msg.yahoo.com/v1/displayImage/yahoo/{0}?{1}'.format(yahoo_id, random.randint(1, 9999))
+    )
+    req.add_header('User-agent', 'Mozilla/5.0 (Windows; U; Windows NT 6.1; en-US)')
+    req.add_header('Cookie', 'Y={0}; T={1}'.format(y_cookie, t_cookie))
+    r = urllib.request.urlopen(req)
+    return r.read()
+
+def upload_display_image(yahoo_id, image_data, t_cookie, y_cookie):
+    # get crumb
+    req = urllib.request.Request('http://rest-core.msg.yahoo.com/v1/session?amIOnline=0&rand=/v1/session')
+    req.add_header('User-agent', 'net_http_transaction_impl_manager/0.1')
+    req.add_header('Cookie', 'Y={0}; T={1}'.format(y_cookie, t_cookie))
+    r = urllib.request.urlopen(req)
+    data = r.read()
+    cd = json.loads(data.decode())
+    crumb = cd['crumb']
+
+    # upload the image
+    req = urllib.request.Request('http://rest-img.msg.yahoo.com/v1/displayImage/custom/yahoo/{0}?src=orion&c={1}'.format(
+            yahoo_id, crumb))
+    req.add_header('User-agent', 'net_http_transaction_impl_manager/0.1')
+    req.add_header('Content-Type', 'image/png')
+    req.add_header('Content-Length', '{0}'.format(len(image_data)))
+    req.add_header('Cookie', 'Y={0}; T={1}'.format(y_cookie, t_cookie))
+    req.add_data(image_data)
+    r = urllib.request.urlopen(req)
+    data = r.read()

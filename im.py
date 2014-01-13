@@ -50,12 +50,13 @@ class Contact:
 
 class Buddy:
     def __init__(self):
-        self.yahoo_id = ''          # buddy's Yahoo! ID
-        self.status   = Status()    # buddy Status
-        self.settings = Settings()  # buddy's settings (only for self-buddy)
-        self.contact  = Contact()   # Contact()
-        self.ignored  = False       # buddy is on ignore list
-        self.pending  = False       # buddy is pending add request confirmation
+        self.yahoo_id       = ''                # buddy's Yahoo! ID
+        self.status         = Status()          # buddy Status
+        self.settings       = Settings()        # buddy's settings (only for self-buddy)
+        self.contact        = Contact()         # Contact()
+        self.display_image  = DisplayImage()    # buddy's display image (avatar)
+        self.ignored        = False             # buddy is on ignore list
+        self.pending        = False             # buddy is pending add request confirmation
 
     def __repr__(self):
         return '<Buddy: "{0}">'.format(self.yahoo_id)
@@ -146,6 +147,17 @@ class MoveBuddy:
         self.yahoo_id = ''
         self.from_group = ''
         self.to_group = ''
+
+
+class DisplayImage:
+    AVATAR_TYPE_NONE = 0
+    AVATAR_TYPE_AVATAR = 1
+    AVATAR_TYPE_ICON = 2
+
+    def __init__(self):
+        self.yahoo_id = ''
+        self.type = DisplayImage.AVATAR_TYPE_NONE
+        self.image_data = ''
 
 
 class Audible:

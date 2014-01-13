@@ -178,6 +178,12 @@ class EmussaSession:
         elif y.service == YAHOO_SERVICE_Y6_STATUS_UPDATE:
             self._buddy_changed_status(y.data)
 
+        elif y.service == YAHOO_SERVICE_AVATAR_UPDATE:
+            self._avatar_update_received(y.data)
+
+        elif y.service == YAHOO_SERVICE_PICTURE_CHECKSUM:
+            self._process_picture_checksum(y.data)
+
         elif y.service == YAHOO_SERVICE_SETTINGS:
             self._set_settings(y.data)
 
@@ -441,6 +447,35 @@ class EmussaSession:
             self._callback(EMUSSA_CALLBACK_BUDDY_UPDATE, buddy)
         self._callback(EMUSSA_CALLBACK_BUDDY_UPDATE_LIST, buddies)
 
+    def _avatar_update_received(self, data):
+        debug.info('Update buddy display image')
+        display_image = DisplayImage()
+        if '4' in data:
+            display_image.yahoo_id = data['4']
+        # if '5' in data:
+        #     display_image.yahoo_id = self.username
+        if '213' in data:
+            display_image.type = int(data['213'])
+
+        if display_image.yahoo_id:
+            time.sleep(1)
+            try:
+                display_image.image_data = utils.download_display_image(
+                    display_image.yahoo_id, self.t_cookie, self.y_cookie
+                )
+            except urllib.error.HTTPError:
+                debug.error('HTTP error while downloading avatar for {0}'.format(display_image.yahoo_id))
+            except:
+                debug.error('Unknown error while downloading avatar for {0}'.format(display_image.yahoo_id))
+            self._callback(EMUSSA_CALLBACK_AVATAR_UPDATED, display_image)
+
+    def _process_picture_checksum(self, data):
+        checksum = ''
+        if '192' in data:
+            checksum = int(data['192'])
+        if '4' in data:
+            yahoo_id = data['4']
+
     def _typing(self, data):
         typing = TypingNotify()
         if '4' in data:
@@ -697,6 +732,14 @@ class EmussaSession:
         mv.to_group = data['264']
         self._callback(EMUSSA_CALLBACK_MOVEBUDDY, mv)
 
+    def _send_display_image(self, display_image):
+        y = YPacket()
+        y.service = YAHOO_SERVICE_AVATAR_UPDATE
+        y.status = YAHOO_STATUS_AVAILABLE
+        y.data['3'] = display_image.yahoo_id
+        y.data['213'] = '{0}'.format(display_image.type)
+        self._send(y)
+
     def _audible_received(self, data):
         debug.info('Audible received')
         a = Audible()
@@ -776,6 +819,39 @@ class EmussaSession:
     def get_addressbook(self):
         debug.info('Send addressbook request')
         threading.Thread(target=self._get_addressbook).start()
+
+    def get_display_image(self, yahoo_id):
+        debug.info('Downloading display image for {0}'.format(yahoo_id))
+        def download_display_image():
+            display_image = DisplayImage()
+            display_image.yahoo_id = yahoo_id
+            display_image.type = DisplayImage.AVATAR_TYPE_ICON
+            try:
+                display_image.image_data = utils.download_display_image(yahoo_id, self.t_cookie, self.y_cookie)
+            except urllib.error.HTTPError:
+                debug.error('HTTP error while downloading avatar for {0}'.format(display_image.yahoo_id))
+            except:
+                debug.error('Unknown error while downloading avatar for {0}'.format(display_image.yahoo_id))
+            self._callback(EMUSSA_CALLBACK_AVATAR_UPDATED, display_image)
+        threading.Thread(target=download_display_image, args=()).start()
+
+    def upload_display_image(self, image_data):
+        debug.info('Setting display image...')
+        def upload_display_image():
+            utils.upload_display_image(self.username, image_data, self.t_cookie, self.y_cookie)
+            self._callback(EMUSSA_CALLBACK_AVATAR_UPLOADED)
+
+        display_image = DisplayImage()
+        display_image.yahoo_id = self.username
+        display_image.type = DisplayImage.AVATAR_TYPE_ICON
+        self._send_display_image(display_image)
+        threading.Thread(target=upload_display_image, args=()).start()
+
+    def delete_display_image(self):
+        display_image = DisplayImage()
+        display_image.yahoo_id = self.username
+        display_image.type = DisplayImage.AVATAR_TYPE_NONE
+        self._send_display_image(display_image)
 
     def add_buddy(self, yahoo_id, group, message, fname, lname, service=1):
         debug.info('Adding {0} to {1}'.format(yahoo_id, group))

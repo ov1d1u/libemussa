@@ -280,3 +280,17 @@ def callback(EmussaSession emussa, Audible a):
 
 Called when an audible message is received. Audible is defined in im.py
 """
+
+
+EMUSSA_CALLBACK_AVATAR_UPDATED = 26
+"""
+Prototype:
+def callback(EmussaSession emussa, DisplayImage a)
+"""
+
+
+EMUSSA_CALLBACK_AVATAR_UPLOADED = 27
+"""
+Prototype:
+def callback(EmussaSession emussa)
+"""
