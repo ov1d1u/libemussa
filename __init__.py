@@ -1,6 +1,8 @@
 import socket, urllib.parse, urllib.request, threading, time
+import os
 import queue
 from collections import OrderedDict
+from random import choice
 
 from .ypacket import YPacket, InvalidPacket
 from .debug import Debugger
@@ -10,7 +12,15 @@ from .im import *
 from .utils import *
 #import const, im, utils
 
-HOST = 'scsa.msg.yahoo.com'
+HOSTS = [
+    'scs.msg.yahoo.com',
+    'scsa.msg.yahoo.com',
+    'scsc.msg.yahoo.com',
+    'scsd.msg.yahoo.com',
+    'scsf.msg.yahoo.com']
+FT_HOSTS = [
+    '66.196.114.184'
+]
 PORT = 5050
 CLIENT_BUILD_ID = '33554367'
 CLIENT_VERSION = '11.5.0.192'
@@ -48,6 +58,9 @@ class EmussaSession:
         self.y_cookie = self.t_cookie = ''
         self.buddylist = OrderedDict()
         self.addressbook = []
+        self.host = choice(HOSTS)
+        self.port = 5050
+        self.ft_host = choice(FT_HOSTS)
 
     def _callback(self, callback_id, *args):
         if callback_id in self.cbs:
@@ -102,8 +115,8 @@ class EmussaSession:
                 self._process_packet(y)
             except InvalidPacket:
                 debug.warning('Invalid packet received, skipping')
-            except:
-                debug.error('Unexpected error while reading data packed')
+            # except:
+            #     debug.error('Unexpected error while reading data packed')
         debug.info('Listener thread ended.')
         self.is_connected = False
 
@@ -125,7 +138,7 @@ class EmussaSession:
 
     def _send(self, y):
         if not self.is_connected:
-            self._connect(HOST, PORT)
+            self._connect(self.host, self.port)
             threading.Thread(target=self._sender).start()
         queue.put(y)
 
@@ -213,6 +226,18 @@ class EmussaSession:
 
         elif y.service == YAHOO_SERVICE_AUDIBLE:
             self._audible_received(y.data)
+
+        elif y.service == YAHOO_SERVICE_FILETRANS_15:
+            self._file_transfer_request(y.data)
+
+        elif y.service == YAHOO_SERVICE_FILETRANS_INFO_15:
+            self._file_transfer_info(y.data)
+
+        elif y.service == YAHOO_SERVICE_FILETRANS_ACC_15:
+            self._file_accepted(y.data)
+
+        elif y.service == YAHOO_SERVICE_DISCONNECT:
+            self._disconnect()
 
         else:
             debug.warning('Unknown packet of type {0}, skipping'.format(hex(y.service)))
@@ -750,6 +775,147 @@ class EmussaSession:
         a.message = data['231']
         self._callback(EMUSSA_CALLBACK_AUDIBLE_RECEIVED, a)
 
+    def _file_transfer_request(self, data):
+        debug.info('File transfer request')
+        files = []
+        sender = ''
+        receiver = ''
+        transfer_id = ''
+        thumbnail = ''
+        transfer_mode = 0
+
+        for kv in data.asKeyVals():
+            if kv.key == '4':
+                sender = kv.value
+            if kv.key == '5':
+                receiver = kv.value
+            if kv.key == '265':
+                transfer_id = kv.value
+            if kv.key == '222':
+                transfer_mode = int(kv.value)
+            if kv.key == '267':
+                thumbnail = kv.value
+            if kv.key == '27':
+                f = File()
+                f.filename = kv.value
+                files.append(f)
+            if kv.key == '28':
+                f.filesize = int(kv.value)
+
+        ft = FileTransfer()
+        ft.sender = sender
+        ft.receiver = receiver
+        ft.transfer_id = transfer_id
+        ft.thumbnail = thumbnail
+        ft.files = files
+
+        if transfer_mode == YAHOO_FILE_TRANSFER_SEND:
+            self._callback(EMUSSA_CALLBACK_FILE_TRANSFER_REQUEST, ft)
+        elif transfer_mode == YAHOO_FILE_TRANSFER_CANCEL:
+            self._callback(EMUSSA_CALLBACK_FILE_TRANSFER_CANCELLED, ft)
+        elif transfer_mode == YAHOO_FILE_TRANSFER_ACCEPT:
+            self._callback(EMUSSA_CALLBACK_FILE_TRANSFER_ACCEPT, ft)
+        elif transfer_mode == YAHOO_FILE_TRANSFER_REJECT:
+            self._callback(EMUSSA_CALLBACK_FILE_TRANSFER_REJECT, ft)
+
+    def _file_transfer_info(self, data):
+        debug.info('Got file transfer information')
+        ftinfo = FileTransferInfo()
+        ftinfo.sender = data['4']
+        ftinfo.receiver = data['5']
+        ftinfo.filename = data['27']
+        ftinfo.transfer_type = int(data['249'])
+        ftinfo.host = data['250']
+        ftinfo.relay_id = data['251']
+        ftinfo.transfer_id = data['265']
+        self._callback(EMUSSA_CALLBACK_FILE_TRANSFER_INFO, ftinfo)
+
+    def _file_accepted(self, data):
+        print(data)
+        ftinfo = FileTransferInfo()
+        ftinfo.sender = data['4']
+        ftinfo.receiver = data['5']
+        # ftinfo.filename = data['27']
+        # ftinfo.transfer_type = int(data['249'])
+        # ftinfo.host = data['250']
+        ftinfo.transfer_id = data['265']
+        if '251' in data:
+            ftinfo.relay_id = data['251']
+        self._callback(EMUSSA_CALLBACK_FILE_TRANSFER_UPLOAD, ftinfo)
+
+    def _accept_file_transfer(self, ft):
+        y = YPacket()
+        y.service = YAHOO_SERVICE_FILETRANS_15
+        y.status = YAHOO_STATUS_AVAILABLE
+        y.data['1'] = ft.sender
+        y.data['5'] = ft.receiver
+        y.data['265'] = ft.transfer_id
+        y.data['222'] = str(YAHOO_FILE_TRANSFER_ACCEPT)
+        self._send(y)
+
+    def _accept_file(self, ftinfo):
+        y = YPacket()
+        y.service = YAHOO_SERVICE_FILETRANS_ACC_15
+        y.status = YAHOO_STATUS_AVAILABLE
+        y.data['1'] = ftinfo.receiver
+        y.data['5'] = ftinfo.sender
+        y.data['265'] = ftinfo.transfer_id
+        y.data['27'] = ftinfo.filename
+        y.data['249'] = str(ftinfo.transfer_type)
+        y.data['250'] = ftinfo.host
+        y.data['251'] = ftinfo.relay_id
+        self._send(y)
+
+    def _accept_next_file(self, file_transfer):
+        y = YPacket()
+        y.service = YAHOO_SERVICE_FILETRANS_ACC_15
+        y.status = YAHOO_STATUS_AVAILABLE
+        y.data['1'] = file_transfer.sender
+        y.data['5'] = file_transfer.receiver
+        y.data['265'] = file_transfer.transfer_id
+        y.data['271'] = '1'
+        self._send(y)
+
+    def _decline_file_transfer(self, ft):
+        y = YPacket()
+        y.service = YAHOO_SERVICE_FILETRANS_15
+        y.status = YAHOO_STATUS_AVAILABLE
+        y.data['1'] = ft.sender
+        y.data['5'] = ft.receiver
+        y.data['265'] = ft.transfer_id
+        y.data['222'] = str(YAHOO_FILE_TRANSFER_REJECT)
+        self._send(y)
+
+    def _send_file_request(self, ft):
+        y = YPacket()
+        y.service = YAHOO_SERVICE_FILETRANS_15
+        y.status = YAHOO_STATUS_AVAILABLE
+        y.data['1'] = ft.sender
+        y.data['5'] = ft.receiver
+        y.data['265'] = ft.transfer_id
+        y.data['222'] = str(YAHOO_FILE_TRANSFER_SEND)
+        y.data['266'] = str(len(ft.files))
+        y.data['302'] = '268'
+        for f in ft.files:
+            y.data['300'] = '268'
+            y.data['27'] = f.filename
+            y.data['28'] = str(f.filesize)
+            y.data['301'] = '268'
+        y.data['303'] = '268'
+        self._send(y)
+
+    def _send_file_info(self, ftinfo):
+        y = YPacket()
+        y.service = YAHOO_SERVICE_FILETRANS_INFO_15
+        y.status = YAHOO_STATUS_AVAILABLE
+        y.data['1'] = ftinfo.sender
+        y.data['5'] = ftinfo.receiver
+        y.data['265'] = ftinfo.transfer_id
+        y.data['27'] = ftinfo.filename
+        y.data['249'] = ftinfo.transfer_type
+        y.data['250'] = ftinfo.host
+        self._send(y)
+
     def _set_settings(self, data):
         raw_data = data['211']
         yahoo_parse_settings(raw_data)
@@ -898,6 +1064,73 @@ class EmussaSession:
         auth.receiver = yahoo_id
         auth.response = 1
         self._accept_auth_request(auth)
+
+    def decline_transfer(self, yahoo_id, transfer_id):
+        ft = FileTransfer()
+        ft.sender = self.username
+        ft.receiver = yahoo_id
+        ft.transfer_id = transfer_id
+        self._decline_file_transfer(ft)
+
+    def accept_transfer(self, yahoo_id, transfer_id):
+        ft = FileTransfer()
+        ft.sender = self.username
+        ft.receiver = yahoo_id
+        ft.transfer_id = transfer_id
+        self._accept_file_transfer(ft)
+
+    def accept_transfer_next_file(self, yahoo_id, transfer_id):
+        ft = FileTransfer()
+        ft.sender = self.username
+        ft.receiver = yahoo_id
+        ft.transfer_id = transfer_id
+        self._accept_next_file(ft)
+
+    def accept_file(self, sender, receiver, filename,
+        transfer_id, transfer_type, host, relay_id):
+        """ 
+        accept a file after receiving its transfer info
+        not to be confused with accept_transfer, which accepts a transfer req.
+        """
+        ftinfo = FileTransferInfo()
+        ftinfo.sender = sender
+        ftinfo.receiver = receiver
+        ftinfo.filename = filename
+        ftinfo.transfer_id = transfer_id
+        ftinfo.transfer_type = transfer_type
+        ftinfo.host = host
+        ftinfo.relay_id = relay_id
+        self._accept_file(ftinfo)
+
+    def send_files(self, yahoo_id, transfer_id, files, thumbnail=None):
+        ft = FileTransfer()
+        ft.sender = self.username
+        ft.receiver = yahoo_id
+        ft.transfer_id = transfer_id
+        ft.thumbnail = thumbnail or ''
+        ft.files = []
+        for path in files:
+            if not os.path.exists(path):
+                debug.error('File not found: {0}'.format(path))
+                return
+            if not os.path.isfile(path):
+                debug.error('Invalid file: {0}'.format(path))
+                return
+            f = File()
+            f.filename = os.path.basename(path)
+            f.filesize = os.path.getsize(path)
+            ft.files.append(f)
+        self._send_file_request(ft)
+
+    def send_file_info(self, yahoo_id, transfer_id, filename):
+        ftinfo = FileTransferInfo()
+        ftinfo.sender = self.username
+        ftinfo.receiver = yahoo_id
+        ftinfo.filename = filename
+        ftinfo.transfer_type = '3'
+        ftinfo.host = self.ft_host
+        ftinfo.transfer_id = transfer_id
+        self._send_file_info(ftinfo)
 
     def update_contact(self, contact):
         threading.Thread(target=self._update_contact, args=(contact,)).start()

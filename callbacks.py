@@ -294,3 +294,45 @@ EMUSSA_CALLBACK_AVATAR_UPLOADED = 27
 Prototype:
 def callback(EmussaSession emussa)
 """
+
+
+EMUSSA_CALLBACK_FILE_TRANSFER_REQUEST = 28
+"""
+Prototype:
+def callback(EmussaSession emussa, FileTransfer ft)
+"""
+
+
+EMUSSA_CALLBACK_FILE_TRANSFER_CANCELLED = 29
+"""
+Prototype:
+def callback(EmussaSession emussa, FileTransfer ft)
+"""
+
+
+EMUSSA_CALLBACK_FILE_TRANSFER_ACCEPT = 30
+"""
+Prototype:
+def callback(EmussaSession emussa, FileTransfer ft)
+"""
+
+
+EMUSSA_CALLBACK_FILE_TRANSFER_REJECT = 31
+"""
+Prototype:
+def callback(EmussaSession emussa, FileTransfer ft)
+"""
+
+
+EMUSSA_CALLBACK_FILE_TRANSFER_INFO = 32
+"""
+Prototype:
+def callback(EmussaSession emussa, FileTransferInfo ftinfo)
+"""
+
+
+EMUSSA_CALLBACK_FILE_TRANSFER_UPLOAD = 33
+"""
+Prototype:
+def callback(EmussaSession emussa, FileTransferInfo ftinfo)
+"""

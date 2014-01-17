@@ -222,6 +222,21 @@ def yahoo_generate_hash(str_data):
 
     return ybase64.decode()
 
+def yahoo_generate_transfer_id():
+    # adapted from sendfiletask.cpp, Kopete
+    new_id = ''
+
+    for i in range(0, 22):
+        j = random.randint(0, 61)
+        if j < 26:
+            new_id += chr(j + ord('a'))
+        elif j < 52:
+            new_id += chr((j - 26) + ord('A'))
+        else:
+            new_id += chr((j - 52) + ord('0'))
+
+    new_id += '$$'
+    return new_id
 
 def contact_from_xml(xml_data):
     xmlcontact = ET.fromstring(xml_data)
@@ -428,3 +443,19 @@ def upload_display_image(yahoo_id, image_data, t_cookie, y_cookie):
     req.add_data(image_data)
     r = urllib.request.urlopen(req)
     data = r.read()
+
+def random_string(length):
+    import random, string
+    return ''.join(random.choice(string.ascii_lowercase) for _ in range(length))
+
+def string_to_md5(string):
+    import hashlib
+    if type(string) == str:
+        string = string.encode()
+    return hashlib.md5(string).hexdigest()
+
+def string_to_base64(string):
+    import base64
+    if type(string) == str:
+        string = string.encode()
+    return base64.b64encode(string).decode()

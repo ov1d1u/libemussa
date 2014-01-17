@@ -172,3 +172,43 @@ class Audible:
         self.name = ''
         self.message = ''
         self.checksum = ''
+
+
+class File:
+    def __init__(self):
+        self.filename = ''
+        self.filesize = 0
+
+    def __repr__(self):
+        return '<File: "{0}", size: {1}>'.format(self.filename, self.filesize)
+
+
+class FileTransfer:
+    def __init__(self):
+        self.files = []
+        self.sender = ''
+        self.receiver = ''
+        self.transfer_id = ''
+        self.thumbnail = ''
+
+
+class FileTransferInfo:
+    def __init__(self):
+        self.sender = ''
+        self.receiver = ''
+        self.filename = ''
+        self.transfer_type = ''
+        self.host = ''
+        self.relay_id = ''
+        self.transfer_id = ''
+
+    def get_download_url(self):
+        url = 'http://{0}/relay?token={1}&sender={2}&recver={3}'
+        return url.format(self.host,
+            self.relay_id.encode().replace(b'\x02', b'%02').decode(),
+            self.receiver,
+            self.sender
+        )
+
+    def get_upload_url(self):
+        return self.get_download_url()  # heh
