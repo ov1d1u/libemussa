@@ -212,3 +212,20 @@ class FileTransferInfo:
 
     def get_upload_url(self):
         return self.get_download_url()  # heh
+
+
+class WebcamNotify:
+    def __init__(self):
+        self.sender = ''
+        self.receiver = ''
+        self.ind = ''
+        self.status = 0
+
+
+class WebcamRequest:
+    def __init__(self):
+        self.sender = ''
+        self.receiver = ''
+        self.server = ''
+        self.key = ''
+        self.image = b''

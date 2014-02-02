@@ -459,3 +459,6 @@ def string_to_base64(string):
     if type(string) == str:
         string = string.encode()
     return base64.b64encode(string).decode()
+
+def yahoo_get32(poc):
+    return (((poc[0])&0xff)<<24) + (((poc[1])&0xff)<<16) + (((poc[2])&0xff)<<8) + (((poc[3])&0xff))

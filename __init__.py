@@ -10,6 +10,7 @@ from .callbacks import *
 from .const import *
 from .im import *
 from .utils import *
+from .webcam import WebcamConnection
 #import const, im, utils
 
 HOSTS = [
@@ -28,7 +29,6 @@ KEEP_ALIVE_TIMEOUT = 30
 
 # init the debugger
 debug = Debugger()
-queue = queue.Queue()
 
 
 class EmussaException(Exception):
@@ -45,6 +45,7 @@ class EmussaSession:
     def __init__(self):
         self.cbs = {}
         self.debug = debug
+        self.queue = queue.Queue()
         self.debug.info('Hi, libemussa here!')
         self._reset()
 
@@ -61,6 +62,8 @@ class EmussaSession:
         self.host = choice(HOSTS)
         self.port = 5050
         self.ft_host = choice(FT_HOSTS)
+        # FIXME: find a better way to identify webcam requests
+        self.webcam_request = None
 
     def _callback(self, callback_id, *args):
         if callback_id in self.cbs:
@@ -91,7 +94,7 @@ class EmussaSession:
         if self.is_connected:
             self.is_connected = False
             self.s.shutdown(socket.SHUT_WR)
-            queue.put(None)  # put this in queue to force stopping the sender thread
+            self.queue.put(None)  # put this in queue to force stopping the sender thread
         self._reset()
         self._callback(EMUSSA_CALLBACK_DISCONNECTED)
 
@@ -126,21 +129,21 @@ class EmussaSession:
 
         debug.info('Starting the socket writer')
         while self.is_connected:
-            ypack = queue.get(True)
+            ypack = self.queue.get(True)
             if not ypack:
                 continue
             ypack.sid = self.session_id
             debug.info('Sending packet of type {0}'.format(hex(ypack.service)))
             self.s.sendall(ypack.encode())
             debug.info('Sent {0} bytes'.format(len(ypack.encode())))
-            queue.task_done()
+            self.queue.task_done()
         debug.info('Sender thread ended.')
 
     def _send(self, y):
         if not self.is_connected:
             self._connect(self.host, self.port)
             threading.Thread(target=self._sender).start()
-        queue.put(y)
+        self.queue.put(y)
 
     def _keepalive(self):
         self.last_keepalive = time.time()
@@ -181,8 +184,11 @@ class EmussaSession:
         elif y.service == YAHOO_SERVICE_LOGOFF:
             self._buddy_offline(y.data)
 
-        elif y.service == YAHOO_SERVICE_TYPING:
-            self._typing(y.data)
+        elif y.service == YAHOO_SERVICE_NOTIFY:
+            if y.data['49'] == 'TYPING':
+                self._typing(y.data)
+            elif y.data['49'] == 'WEBCAMINVITE':
+                self._webcaminvite(y.data)
 
         elif y.service == YAHOO_SERVICE_MESSAGE:
             offline = y.status == 5
@@ -235,6 +241,9 @@ class EmussaSession:
 
         elif y.service == YAHOO_SERVICE_FILETRANS_ACC_15:
             self._file_accepted(y.data)
+
+        elif y.service == YAHOO_SERVICE_WEBCAM:
+            self._webcam_info_received(y.data)
 
         elif y.service == YAHOO_SERVICE_DISCONNECT:
             self._disconnect()
@@ -513,6 +522,17 @@ class EmussaSession:
             debug.info('End typing: {0}'.format(typing.sender))
         self._callback(EMUSSA_CALLBACK_TYPING_NOTIFY, typing)
 
+    def _webcaminvite(self, data):
+        wnotify = WebcamNotify()
+        if '1' in data:
+            wnotify.sender = data['1']
+        wnotify.receiver = data['5']
+        wnotify.ind = data['14']
+        if '15' in data:
+            wnotify.status = int(data['15'])
+        if wnotify.ind.startswith(' '):
+            self._callback(EMUSSA_CALLBACK_WEBCAM_INVITE, wnotify)
+
     def _message_received(self, data, offline=False):
         if offline:
             debug.info('Got offline messages')
@@ -619,7 +639,7 @@ class EmussaSession:
 
     def _send_typing(self, tn):
         y = YPacket()
-        y.service = YAHOO_SERVICE_TYPING
+        y.service = YAHOO_SERVICE_NOTIFY
         y.status = YAHOO_STATUS_NOTIFY
         y.data['49'] = 'TYPING'
         y.data['1'] = self.username
@@ -831,7 +851,6 @@ class EmussaSession:
         self._callback(EMUSSA_CALLBACK_FILE_TRANSFER_INFO, ftinfo)
 
     def _file_accepted(self, data):
-        print(data)
         ftinfo = FileTransferInfo()
         ftinfo.sender = data['4']
         ftinfo.receiver = data['5']
@@ -842,6 +861,17 @@ class EmussaSession:
         if '251' in data:
             ftinfo.relay_id = data['251']
         self._callback(EMUSSA_CALLBACK_FILE_TRANSFER_UPLOAD, ftinfo)
+
+    def _webcam_info_received(self, data):
+        debug.info('Received webcam info')
+        w = WebcamRequest()
+        w.sender = self.webcam_request.receiver
+        w.receiver = data['5']
+        w.key = data['61']
+        w.server = data['102']
+        wconn = WebcamConnection(self, w)
+        wconn.connect()
+        self.webcam_request = None
 
     def _accept_file_transfer(self, ft):
         y = YPacket()
@@ -886,6 +916,16 @@ class EmussaSession:
         y.data['222'] = str(YAHOO_FILE_TRANSFER_REJECT)
         self._send(y)
 
+    def _cancel_file_transfer(self, ft):
+        y = YPacket()
+        y.service = YAHOO_SERVICE_FILETRANS_15
+        y.status = YAHOO_STATUS_AVAILABLE
+        y.data['1'] = ft.sender
+        y.data['5'] = ft.receiver
+        y.data['265'] = ft.transfer_id
+        y.data['222'] = str(YAHOO_FILE_TRANSFER_CANCEL)
+        self._send(y)
+
     def _send_file_request(self, ft):
         y = YPacket()
         y.service = YAHOO_SERVICE_FILETRANS_15
@@ -895,6 +935,8 @@ class EmussaSession:
         y.data['265'] = ft.transfer_id
         y.data['222'] = str(YAHOO_FILE_TRANSFER_SEND)
         y.data['266'] = str(len(ft.files))
+        if ft.thumbnail:
+            y.data['267'] = ft.thumbnail
         y.data['302'] = '268'
         for f in ft.files:
             y.data['300'] = '268'
@@ -919,6 +961,14 @@ class EmussaSession:
     def _set_settings(self, data):
         raw_data = data['211']
         yahoo_parse_settings(raw_data)
+
+    def _send_webcam_request(self, webcam):
+        y = YPacket()
+        y.service = YAHOO_SERVICE_WEBCAM
+        y.status = YAHOO_STATUS_AVAILABLE
+        y.data['1'] = webcam.sender
+        y.data['5'] = webcam.receiver
+        self._send(y)
 
     # "public" methods
     def register_callback(self, callback_id, function):
@@ -1072,6 +1122,13 @@ class EmussaSession:
         ft.transfer_id = transfer_id
         self._decline_file_transfer(ft)
 
+    def cancel_transfer(self, yahoo_id, transfer_id):
+        ft = FileTransfer()
+        ft.sender = self.username
+        ft.receiver = yahoo_id
+        ft.transfer_id = transfer_id
+        self._cancel_file_transfer(ft)
+
     def accept_transfer(self, yahoo_id, transfer_id):
         ft = FileTransfer()
         ft.sender = self.username
@@ -1088,7 +1145,7 @@ class EmussaSession:
 
     def accept_file(self, sender, receiver, filename,
         transfer_id, transfer_type, host, relay_id):
-        """ 
+        """
         accept a file after receiving its transfer info
         not to be confused with accept_transfer, which accepts a transfer req.
         """
@@ -1134,3 +1191,10 @@ class EmussaSession:
 
     def update_contact(self, contact):
         threading.Thread(target=self._update_contact, args=(contact,)).start()
+
+    def send_webcam_request(self, yahoo_id):
+        webcam = WebcamRequest()
+        webcam.sender = self.username
+        webcam.receiver = yahoo_id
+        self.webcam_request = webcam
+        self._send_webcam_request(webcam)

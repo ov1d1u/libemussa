@@ -336,3 +336,24 @@ EMUSSA_CALLBACK_FILE_TRANSFER_UPLOAD = 33
 Prototype:
 def callback(EmussaSession emussa, FileTransferInfo ftinfo)
 """
+
+EMUSSA_CALLBACK_WEBCAM_INVITE = 34
+"""
+Prototype:
+def callback(EmussaSession emussa, WebcamNotify wnotify)
+"""
+
+EMUSSA_CALLBACK_WEBCAM_NOT_AVAILABLE = 35
+"""
+Prototype:
+def callback(EmussaSession emussa, WebcamRequest w)
+"""
+
+EMUSSA_CALLBACK_WEBCAM_IMAGE_READY = 36
+"""
+Prototype:
+def callback(EmussaSession emussa, WebcamRequest w)
+
+Called when an image was received and is ready to be displayed.
+The image is in BMP format and its raw data can be accessed via w.image
+"""
