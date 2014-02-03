@@ -154,15 +154,22 @@ class WebcamConnection:
                 while len(data) < dataLength:
                     data += self.s.recv(1)
             if headerLength == 13:
-                print(':'.join("%02x" % b for b in hdata))
+                # print(':'.join("%02x" % b for b in hdata))
                 if hdata[8] == ord(b'\x02'):
                     imgdata = data
                     bmpdata = self._convertFrame(data)
                     if bmpdata:
                         self.w.image = bmpdata
-                        self.ym._callback(EMUSSA_CALLBACK_WEBCAM_IMAGE_READY,
-                                          self.w)
                         debug.info('Webcam: received image')
+                        cbs = self.ym.cbs[EMUSSA_CALLBACK_WEBCAM_IMAGE_READY]
+                        if len(cbs) > 0:
+                            self.ym._callback(
+                                EMUSSA_CALLBACK_WEBCAM_IMAGE_READY,
+                                self.w)
+                        else:
+                            self._disconnect()
+                            debug.error('No callbacks attached, disconnecting')
+                            return
                     else:
                         debug.info('Webcam: invalid image')
             if headerLength > 13 or headerLength <= 0:
@@ -187,3 +194,6 @@ class WebcamConnection:
         # connect (1st stage)
         threading.Thread(target=self._connect1,
                          args=(self._connected1, )).start()
+
+    def disconnect(self):
+        self._disconnect()

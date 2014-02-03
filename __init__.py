@@ -523,9 +523,10 @@ class EmussaSession:
         self._callback(EMUSSA_CALLBACK_TYPING_NOTIFY, typing)
 
     def _webcaminvite(self, data):
+        print(data)
         wnotify = WebcamNotify()
-        if '1' in data:
-            wnotify.sender = data['1']
+        if '4' in data:
+            wnotify.sender = data['4']
         wnotify.receiver = data['5']
         wnotify.ind = data['14']
         if '15' in data:
@@ -970,6 +971,28 @@ class EmussaSession:
         y.data['5'] = webcam.receiver
         self._send(y)
 
+    def _deny_webcam_request(self, webcam):
+        y = YPacket()
+        y.service = YAHOO_SERVICE_NOTIFY
+        y.status = YAHOO_STATUS_NOTIFY
+        y.data['1'] = webcam.sender
+        y.data['5'] = webcam.receiver
+        y.data['49'] = 'WEBCAMINVITE'
+        y.data['14'] = '-1'
+        y.data['13'] = '0'
+        self._send(y)
+
+    def _accept_webcam_request(self, webcam):
+        y = YPacket()
+        y.service = YAHOO_SERVICE_NOTIFY
+        y.status = YAHOO_STATUS_NOTIFY
+        y.data['1'] = webcam.sender
+        y.data['5'] = webcam.receiver
+        y.data['49'] = 'WEBCAMINVITE'
+        y.data['14'] = '1'
+        y.data['13'] = '0'
+        self._send(y)
+
     # "public" methods
     def register_callback(self, callback_id, function):
         if callback_id in self.cbs:
@@ -1198,3 +1221,17 @@ class EmussaSession:
         webcam.receiver = yahoo_id
         self.webcam_request = webcam
         self._send_webcam_request(webcam)
+
+    def deny_webcam_request(self, yahoo_id):
+        webcam = WebcamRequest()
+        webcam.sender = self.username
+        webcam.receiver = yahoo_id
+        self.webcam_request = None
+        self._deny_webcam_request(webcam)
+
+    def accept_webcam_request(self, yahoo_id):
+        webcam = WebcamRequest()
+        webcam.sender = self.username
+        webcam.receiver = yahoo_id
+        self.webcam_request = None
+        self._accept_webcam_request(webcam)
